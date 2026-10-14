@@ -3,6 +3,10 @@
 Reusable Java Spring Boot starter project using Maven and Java 17. The Spring
 Boot project is under `backend/`.
 
+The backend includes Spring MVC, Bean Validation, Spring Data JPA, PostgreSQL,
+Lombok, Spring Boot DevTools, and the Spring Boot testing stack. Dependency
+versions are managed by the Spring Boot parent in `backend/pom.xml`.
+
 ## Run
 
 ```bash

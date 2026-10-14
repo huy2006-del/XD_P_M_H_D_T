@@ -1,0 +1,14 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: freshvend_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: freshvend_user
+      POSTGRES_PASSWORD: 08022006asd
+      POSTGRES_DB: freshvend_db
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./schema.sql:/docker-entrypoint-initdb.d/init.sql
