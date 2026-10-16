@@ -1,0 +1,143 @@
+/* 1. DESIGN TOKENS */
+:root {
+  /* Text */
+  --text: #6b6375;
+  --text-h: #08060d;
+
+  /* Background */
+  --bg: #ffffff;
+
+  /* Border */
+  --border: #e5e4e7;
+
+  /* Existing shared tokens */
+  --code-bg: #f4f3ec;
+  --accent: #aa3bff;
+  --accent-bg: rgba(170, 59, 255, 0.1);
+  --accent-border: rgba(170, 59, 255, 0.5);
+  --social-bg: rgba(244, 243, 236, 0.5);
+
+  --shadow:
+    rgba(0, 0, 0, 0.1) 0 10px 15px -3px,
+    rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
+
+  /* FreshVend brand colors */
+  --fv-primary: #16a34a;
+  --fv-primary-hover: #15803d;
+  --fv-primary-light: #f0fdf4;
+  --fv-dark-green: #166534;
+
+  /* Typography */
+  --sans: Inter, "Segoe UI", Roboto, Arial, sans-serif;
+  --heading: Inter, "Segoe UI", Roboto, Arial, sans-serif;
+  --mono: ui-monospace, Consolas, monos;
+
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.5;
+
+  color-scheme: light;
+  color: #0f172a;
+  background-color: #ffffff;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* 2. GLOBAL BOX SIZING */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+/* 3. FULL-WIDTH APPLICATION LAYOUT */
+html {
+  width: 100%;
+  min-height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  width: 100%;
+  min-width: 320px;
+  min-height: 100vh;
+
+  margin: 0;
+  padding: 0;
+
+  background-color: #ffffff;
+  color: #0f172a;
+}
+
+/* React application root */
+#root {
+  width: 100%;
+  min-height: 100vh;
+  min-height: 100dvh;
+
+  margin: 0;
+  padding: 0;
+
+  display: block;
+
+  background-color: #ffffff;
+}
+
+/* 4. TYPOGRAPHY */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--heading);
+}
+
+p {
+  margin-top: 0;
+}
+
+/* 5. FORM ELEMENTS */
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
+/* 6. LINKS */
+a {
+  color: inherit;
+}
+
+/* 7. MEDIA */
+img,
+svg {
+  max-width: 100%;
+}
+
+img {
+  display: block;
+  height: auto;
+}
+
+/* 8. CODE ELEMENTS */
+code {
+  font-family: var(--mono);
+}
+
+/* 9. RESPONSIVE */
+@media (max-width: 768px) {
+  :root {
+    font-size: 15px;
+  }
+
+  body {
+    min-width: 320px;
+  }
+}
