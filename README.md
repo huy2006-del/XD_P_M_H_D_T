@@ -7,6 +7,41 @@ The backend includes Spring MVC, Bean Validation, Spring Data JPA, PostgreSQL,
 Lombok, Spring Boot DevTools, and the Spring Boot testing stack. Dependency
 versions are managed by the Spring Boot parent in `backend/pom.xml`.
 
+## Database configuration
+
+The backend connects to PostgreSQL at `localhost:5433` by default. Configure
+`DB_PASSWORD` in the shell before running it; `DB_URL` and `DB_USERNAME` can
+also be overridden. For example, in PowerShell:
+
+```powershell
+$env:DB_PASSWORD = "<the PostgreSQL password configured for your environment>"
+cd backend
+mvn spring-boot:run
+```
+
+The `operators` table provides the minimal operator reference (`id`, `full_name`)
+used by vending machines. Populate it from your employee-management module or
+insert operator records before creating machines. For local testing, you can
+create an operator directly in PostgreSQL:
+
+```sql
+INSERT INTO operators (full_name) VALUES ('Nguyễn Văn Vận Hành') RETURNING id;
+```
+
+## Vending machines and locations API
+
+- `GET /api/v1/locations` and `POST /api/v1/locations`
+- `GET /api/v1/machines?status=ONLINE&locationId=1`
+- `GET /api/v1/machines/{id}`
+- `POST /api/v1/machines` (returns `201 Created`; serial number must be unique)
+- `PUT /api/v1/machines/{id}`
+- `PATCH /api/v1/machines/{id}/status` with `{"status":"MAINTENANCE"}`
+
+Create a location with `name`, `address`, `city`, and optional `latitude` and
+`longitude`. Machine create/update requests accept `serialNumber`, `name`,
+optional `model`, `locationId`, and `operatorId`. New machines start as
+`ONLINE`; machine responses include the location summary and operator name.
+
 ## Run
 
 ```bash
