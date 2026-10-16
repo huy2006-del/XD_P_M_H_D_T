@@ -1,6 +1,6 @@
 import { Product } from '../types/product.types';
 import { formatCurrency } from '@/shared/utils/format';
-import { Switch } from '@/shared/components/ui/Switch';
+import { ProductStatusSwitch } from './ProductStatusSwitch';
 import { Button } from '@/shared/components/ui/Button';
 import { SafeTempBadge } from './SafeTempBadge';
 import { Spinner } from '@/shared/components/ui/Spinner';
@@ -85,18 +85,12 @@ export const ProductTable = ({
               <td className="px-4 py-3">
                 <SafeTempBadge minTempC={p.minTempC} maxTempC={p.maxTempC} />
               </td>
-              <td className="px-4 py-3">
-                <div className="flex items-center gap-2">
-                  <Switch
-                    checked={p.isActive}
-                    disabled={togglingId === p.id}
-                    onCheckedChange={(next) => onToggleStatus(p, next)}
-                    aria-label={`Đổi trạng thái ${p.name}`}
-                  />
-                  <span className={p.isActive ? 'text-emerald-600' : 'text-slate-400'}>
-                    {p.isActive ? 'Đang bán' : 'Ngừng bán'}
-                  </span>
-                </div>
+                            <td className="px-4 py-3">
+                <ProductStatusSwitch
+                  isActive={p.isActive}
+                  loading={togglingId === p.id}
+                  onChange={(next) => onToggleStatus(p, next)}
+                />
               </td>
               <td className="px-4 py-3 text-right">
                 <div className="flex justify-end gap-2">

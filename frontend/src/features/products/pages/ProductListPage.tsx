@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react';
 import { useProductList, useCreateProduct, useUpdateProduct, useToggleProductStatus } from '../hooks/useProducts';
-import { ProductFilters, StatusFilter } from '../components/ProductFilters';
+import { ProductToolbar, ProductStatusFilter } from '../components/ProductToolbar';
 import { ProductTable } from '../components/ProductTable';
 import { ProductFormModal } from '../components/ProductFormModal';
+import { ProductDetailDrawer } from '../components/ProductDetailDrawer';
 import { Pagination } from '@/shared/components/ui/Pagination';
 import { Product, ProductUpsertPayload } from '../types/product.types';
 
@@ -11,7 +12,7 @@ const PAGE_SIZE = 10;
 export const ProductListPage = () => {
   const [page, setPage] = useState(1); // UI 1-based
   const [keyword, setKeyword] = useState('');
-  const [status, setStatus] = useState<StatusFilter>('all');
+  const [status, setStatus] = useState<ProductStatusFilter>('all');
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Product | null>(null);
   const [togglingId, setTogglingId] = useState<string | undefined>();
@@ -79,8 +80,8 @@ export const ProductListPage = () => {
         )}
       </div>
 
-      {/* Filters */}
-      <ProductFilters
+            {/* Toolbar */}
+      <ProductToolbar
         keyword={keyword}
         status={status}
         onKeywordChange={(v) => {
@@ -127,32 +128,17 @@ export const ProductListPage = () => {
         onSubmit={handleSubmit}
       />
 
-      {/* View Detail Modal (đơn giản) */}
-      {viewing && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4"
-          onClick={() => setViewing(null)}
-        >
-          <div
-            className="w-full max-w-md rounded-2xl bg-white p-6"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 className="mb-3 text-lg font-semibold">{viewing.name}</h3>
-            <dl className="space-y-2 text-sm">
-              <Row label="SKU" value={viewing.sku} />
-              <Row label="Đơn giá" value={new Intl.NumberFormat('vi-VN').format(viewing.price) + ' ₫'} />
-              <Row label="Đơn vị" value={viewing.unit} />
-              <Row label="Hạn sử dụng" value={`${viewing.shelfLifeDays} ngày`} />
-              <Row label="Dải nhiệt" value={`${viewing.minTempC}°C – ${viewing.maxTempC}°C`} />
-              <Row label="Trạng thái" value={viewing.isActive ? 'Đang bán' : 'Ngừng bán'} />
-              {viewing.description && <Row label="Mô tả" value={viewing.description} />}
-            </dl>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
+            {/* Detail Drawer */}
+      <ProductDetailDrawer
+        open={!!viewing}
+        product={viewing}
+        onClose={() => setViewing(null)}
+        onEdit={(p) => {
+          setViewing(null);
+          setEditing(p);
+          setModalOpen(true);
+        }}
+      />
 
 const Row = ({ label, value }: { label: string; value: string }) => (
   <div className="flex justify-between gap-4">
