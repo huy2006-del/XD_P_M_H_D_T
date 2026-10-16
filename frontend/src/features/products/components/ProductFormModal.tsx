@@ -1,10 +1,11 @@
-import { useForm, Controller } from 'react-hook-form';       
+import { useEffect } from 'react';
+import { useForm, Controller } from 'react-hook-form';   // ← gộp
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Modal } from '@/shared/components/ui/Modal';
 import { Button } from '@/shared/components/ui/Button';
 import { Input } from '@/shared/components/ui/Input';
-import { ImageUploadField } from './ImageUploadField';        
+import { ImageUploadField } from './ImageUploadField';
 import {
   PRODUCT_UNITS,
   Product,
@@ -67,11 +68,11 @@ export const ProductFormModal = ({
   onClose,
   onSubmit,
 }: ProductFormModalProps) => {
-    const {
+  const {
     register,
     handleSubmit,
     reset,
-    control,                         
+    control,                                  // ← THÊM
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -98,6 +99,8 @@ export const ProductFormModal = ({
       reset(defaultValues);
     }
   }, [open, mode, product, reset]);
+
+  // ← ĐÃ XÓA: const imageUrl = watch('imageUrl');
 
   const submit = handleSubmit(async (values) => {
     await onSubmit({
@@ -224,7 +227,7 @@ export const ProductFormModal = ({
           {errors.maxTempC && <p className="mt-1 text-xs text-red-500">{errors.maxTempC.message}</p>}
         </div>
 
-       {/* Ảnh — dùng Controller vì ImageUploadField không phải HTML input gốc */}
+        {/* Ảnh — dùng Controller vì ImageUploadField không phải HTML input gốc */}
         <div className="md:col-span-2">
           <label className="mb-1 block text-sm font-medium text-slate-700">
             Ảnh sản phẩm
