@@ -14,7 +14,6 @@ public class UserResponse {
     String lastName;
     String email;
 
-    // Constructor thay thế cho @AllArgsConstructor
     public UserResponse(String id, String username, String firstName, String lastName, String email) {
         this.id = id;
         this.username = username;
