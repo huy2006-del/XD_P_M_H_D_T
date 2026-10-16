@@ -1,10 +1,11 @@
 import { useEffect } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, Controller } from 'react-hook-form';   // ← gộp
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Modal } from '@/shared/components/ui/Modal';
 import { Button } from '@/shared/components/ui/Button';
 import { Input } from '@/shared/components/ui/Input';
+import { ImageUploadField } from './ImageUploadField';
 import {
   PRODUCT_UNITS,
   Product,
@@ -71,7 +72,7 @@ export const ProductFormModal = ({
     register,
     handleSubmit,
     reset,
-    watch,
+    control,                                  // ← THÊM
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -99,7 +100,7 @@ export const ProductFormModal = ({
     }
   }, [open, mode, product, reset]);
 
-  const imageUrl = watch('imageUrl');
+  // ← ĐÃ XÓA: const imageUrl = watch('imageUrl');
 
   const submit = handleSubmit(async (values) => {
     await onSubmit({
@@ -226,32 +227,23 @@ export const ProductFormModal = ({
           {errors.maxTempC && <p className="mt-1 text-xs text-red-500">{errors.maxTempC.message}</p>}
         </div>
 
-        {/* Ảnh */}
+        {/* Ảnh — dùng Controller vì ImageUploadField không phải HTML input gốc */}
         <div className="md:col-span-2">
-          <label className="mb-1 block text-sm font-medium text-slate-700">URL ảnh sản phẩm</label>
-          <Input placeholder="https://…" invalid={!!errors.imageUrl} {...register('imageUrl')} />
-          {errors.imageUrl && <p className="mt-1 text-xs text-red-500">{errors.imageUrl.message}</p>}
-
-          {/* Preview */}
-          <div className="mt-3 flex items-center gap-3">
-            <div className="h-20 w-20 overflow-hidden rounded-lg bg-slate-100 ring-1 ring-slate-200">
-              {imageUrl ? (
-                <img
-                  src={imageUrl}
-                  alt="preview"
-                  className="h-full w-full object-cover"
-                  onError={(e) => {
-                    (e.currentTarget as HTMLImageElement).src = '';
-                  }}
-                />
-              ) : (
-                <div className="flex h-full w-full items-center justify-center text-slate-300">🍓</div>
-              )}
-            </div>
-            <p className="text-xs text-slate-500">
-              Xem trước ảnh sẽ hiển thị tại đây. Để trống nếu chưa có ảnh.
-            </p>
-          </div>
+          <label className="mb-1 block text-sm font-medium text-slate-700">
+            Ảnh sản phẩm
+          </label>
+          <Controller
+            control={control}
+            name="imageUrl"
+            render={({ field, fieldState }) => (
+              <ImageUploadField
+                value={field.value ?? ''}
+                onChange={field.onChange}
+                invalid={!!fieldState.error}
+                errorMessage={fieldState.error?.message}
+              />
+            )}
+          />
         </div>
 
         {/* Mô tả */}
