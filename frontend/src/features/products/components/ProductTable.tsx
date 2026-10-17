@@ -1,4 +1,4 @@
-import { Product } from '../types/product.types';
+import type { Product } from '../types/product.types';
 import { formatCurrency } from '@/shared/utils/format';
 import { ProductStatusSwitch } from './ProductStatusSwitch';
 import { Button } from '@/shared/components/ui/Button';

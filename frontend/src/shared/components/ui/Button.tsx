@@ -1,4 +1,4 @@
-import { ButtonHTMLAttributes, forwardRef } from 'react';
+import { forwardRef, type ButtonHTMLAttributes } from 'react';
 import { cn } from '@/shared/utils/cn';
 
 type Variant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'outline';

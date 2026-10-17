@@ -1,4 +1,4 @@
-import { useRef, useState, ChangeEvent, DragEvent } from 'react';
+import { useRef, useState, type ChangeEvent, type DragEvent } from 'react';
 import { Input } from '@/shared/components/ui/Input';
 import { Button } from '@/shared/components/ui/Button';
 import { cn } from '@/shared/utils/cn';

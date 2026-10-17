@@ -1,11 +1,11 @@
 import { useMemo, useState } from 'react';
 import { useProductList, useCreateProduct, useUpdateProduct, useToggleProductStatus } from '../hooks/useProducts';
-import { ProductToolbar, ProductStatusFilter } from '../components/ProductToolbar';
+import { ProductToolbar, type ProductStatusFilter } from '../components/ProductToolbar';
 import { ProductTable } from '../components/ProductTable';
 import { ProductFormModal } from '../components/ProductFormModal';
 import { ProductDetailDrawer } from '../components/ProductDetailDrawer';
 import { Pagination } from '@/shared/components/ui/Pagination';
-import { Product, ProductUpsertPayload } from '../types/product.types';
+import type { Product, ProductUpsertPayload } from '../types/product.types';
 
 const PAGE_SIZE = 10;
 
@@ -139,10 +139,6 @@ export const ProductListPage = () => {
           setModalOpen(true);
         }}
       />
-
-const Row = ({ label, value }: { label: string; value: string }) => (
-  <div className="flex justify-between gap-4">
-    <dt className="text-slate-500">{label}</dt>
-    <dd className="text-right font-medium text-slate-800">{value}</dd>
-  </div>
-);
+    </div>
+  );
+};
