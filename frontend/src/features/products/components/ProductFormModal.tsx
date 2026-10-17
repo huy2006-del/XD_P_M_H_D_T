@@ -8,9 +8,8 @@ import { Input } from '@/shared/components/ui/Input';
 import { ImageUploadField } from './ImageUploadField';
 import {
   PRODUCT_UNITS,
-  Product,
-  ProductUpsertPayload,
 } from '../types/product.types';
+import type { Product, ProductUpsertPayload } from '../types/product.types';
 
 const schema = z
   .object({

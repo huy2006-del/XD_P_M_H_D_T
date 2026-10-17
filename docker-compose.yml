@@ -1,3 +1,5 @@
+name: freshvend
+
 services:
   postgres:
     image: postgres:15-alpine
@@ -11,4 +13,6 @@ services:
       - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./schema.sql:/docker-entrypoint-initdb.d/init.sql
+
+volumes:
+  postgres_data:

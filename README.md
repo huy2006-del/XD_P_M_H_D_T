@@ -1,23 +1,76 @@
-# Spring Boot Template
+# FreshVend
 
-Reusable Java Spring Boot starter project using Maven and Java 17. The Spring
-Boot project is under `backend/`.
+FreshVend has a Spring Boot backend, React/Vite frontend, and PostgreSQL
+database.
 
 The backend includes Spring MVC, Bean Validation, Spring Data JPA, PostgreSQL,
 Lombok, Spring Boot DevTools, and the Spring Boot testing stack. Dependency
 versions are managed by the Spring Boot parent in `backend/pom.xml`.
 
-## Database configuration
+## Run the whole project (Windows PowerShell)
 
-The backend connects to PostgreSQL at `localhost:5433` by default. Configure
-`DB_PASSWORD` in the shell before running it; `DB_URL` and `DB_USERNAME` can
-also be overridden. For example, in PowerShell:
+Install Java 17+, Maven, Node.js/npm, and start Docker Desktop. Open three
+PowerShell terminals at the repository root (`C:\XD_P_M_H_D_T`).
+
+**Terminal 1 — PostgreSQL:**
 
 ```powershell
-$env:DB_PASSWORD = "<the PostgreSQL password configured for your environment>"
-cd backend
+docker compose up -d postgres
+```
+
+**Terminal 2 — backend:**
+
+```powershell
+$env:DB_PASSWORD = "freshvend_secret_password"
+Set-Location backend
 mvn spring-boot:run
 ```
+
+The API listens on `http://localhost:8080`.
+
+**Terminal 3 — frontend:**
+
+Install dependencies once (or again only after `package.json` / lockfile
+changes). Do not run `npm ci` while the Vite development server is running:
+Windows may prevent npm from replacing its native Rolldown files.
+
+```powershell
+Set-Location frontend
+npm ci
+```
+
+Then start the frontend:
+
+```powershell
+$env:VITE_USE_MOCK_AUTH = "true"
+npm run dev
+```
+
+Open the Vite URL printed in the terminal (normally `http://localhost:5173`).
+The backend does not yet implement authentication, so enable mock login for
+frontend development. Sign in with `admin` / `admin123` or `operator` /
+`operator123`.
+
+Stop each running server with `Ctrl+C`. Stop PostgreSQL from the repository root:
+
+```powershell
+docker compose down
+```
+
+`docker compose down -v` also deletes the database data volume.
+
+If your terminal is currently inside `frontend`, run `Set-Location ..` (or
+`cd ..`) to return to the repository root. To switch straight to the backend,
+run `Set-Location ..\backend`.
+
+The frontend requires `frontend/package.json`; install its packages from that
+folder with `npm ci`. For a production frontend build, run `npm run build`.
+
+## Database configuration
+
+The backend connects to PostgreSQL at `localhost:5433` by default. You can
+override the connection with `DB_URL` and `DB_USERNAME`; `SERVER_PORT` changes
+the HTTP port.
 
 The `operators` table provides the minimal operator reference (`id`, `full_name`)
 used by vending machines. Populate it from your employee-management module or
@@ -42,19 +95,9 @@ Create a location with `name`, `address`, `city`, and optional `latitude` and
 optional `model`, `locationId`, and `operatorId`. New machines start as
 `ONLINE`; machine responses include the location summary and operator name.
 
-## Run
-
-```bash
-cd backend
-mvn spring-boot:run
-```
-
-The application starts on port `8080` by default. Set `SERVER_PORT` to use a
-different port.
-
 ## Build and test
 
-```bash
+```powershell
 cd backend
 mvn test
 mvn package
