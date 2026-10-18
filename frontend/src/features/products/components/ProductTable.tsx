@@ -34,7 +34,6 @@ export const ProductTable = ({
   if (products.length === 0) {
     return (
       <EmptyState
-        icon="🍎"
         title="Chưa có sản phẩm nào"
         description="Bắt đầu bằng cách thêm sản phẩm trái cây đầu tiên cho hệ thống."
       />
@@ -71,7 +70,6 @@ export const ProductTable = ({
                     />
                   ) : (
                     <div className="flex h-full w-full items-center justify-center text-slate-300">
-                      🍇
                     </div>
                   )}
                 </div>
