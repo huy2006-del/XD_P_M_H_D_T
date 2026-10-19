@@ -40,4 +40,8 @@ export const productsApi = {
     const { data } = await axiosInstance.patch<Product>(`${BASE}/${id}/status`, { isActive });
     return data;
   },
+
+  remove: async (id: string): Promise<void> => {
+    await axiosInstance.delete(`${BASE}/${id}`);
+  },
 };

@@ -1,9 +1,9 @@
-package com.freshvend.identity_service.controller;
+package com.example.app.controller;
 
-import com.freshvend.identity_service.dto.request.UserCreationRequest;
-import com.freshvend.identity_service.dto.response.ApiResponse;
-import com.freshvend.identity_service.dto.response.UserResponse;
-import com.freshvend.identity_service.service.UserService;
+import com.example.app.dto.UserCreationRequest;
+import com.example.app.dto.ApiResponse;
+import com.example.app.dto.UserResponse;
+import com.example.app.service.UserService;
 import jakarta.validation.Valid;
 import lombok.AccessLevel;
 import lombok.experimental.FieldDefaults;

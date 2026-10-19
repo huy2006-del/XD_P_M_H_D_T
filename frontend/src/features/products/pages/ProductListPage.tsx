@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react';
-import { useProductList, useCreateProduct, useUpdateProduct, useToggleProductStatus } from '../hooks/useProducts';
+import { useProductList, useCreateProduct, useUpdateProduct, useToggleProductStatus, useDeleteProduct } from '../hooks/useProducts';
 import { ProductToolbar, type ProductStatusFilter } from '../components/ProductToolbar';
 import { ProductTable } from '../components/ProductTable';
 import { ProductFormModal } from '../components/ProductFormModal';
 import { ProductDetailDrawer } from '../components/ProductDetailDrawer';
 import { Pagination } from '@/shared/components/ui/Pagination';
+import { ConfirmDialog } from '@/shared/components/ui/ConfirmDialog';
 import type { Product, ProductUpsertPayload } from '../types/product.types';
 
 const PAGE_SIZE = 10;
@@ -17,6 +18,7 @@ export const ProductListPage = () => {
   const [editing, setEditing] = useState<Product | null>(null);
   const [togglingId, setTogglingId] = useState<string | undefined>();
   const [viewing, setViewing] = useState<Product | null>(null);
+  const [deleting, setDeleting] = useState<Product | null>(null);
 
   const query = useMemo(
     () => ({
@@ -32,6 +34,7 @@ export const ProductListPage = () => {
   const createMutation = useCreateProduct();
   const updateMutation = useUpdateProduct();
   const toggleMutation = useToggleProductStatus();
+  const deleteMutation = useDeleteProduct();
 
   const products = data?.content ?? [];
   const totalPages = data?.totalPages ?? 0;
@@ -53,6 +56,20 @@ export const ProductListPage = () => {
       { id: product.id, isActive: next },
       { onSettled: () => setTogglingId(undefined) }
     );
+  };
+
+  const handleDelete = (product: Product) => setDeleting(product);
+
+  const confirmDelete = () => {
+    if (!deleting) return;
+    deleteMutation.mutate(deleting.id, {
+      onSuccess: () => {
+        // Xóa sản phẩm cuối của trang hiện tại thì lùi về trang trước
+        if (products.length === 1 && page > 1) setPage(page - 1);
+        setDeleting(null);
+      },
+      onError: () => setDeleting(null),
+    });
   };
 
   const handleSubmit = async (payload: ProductUpsertPayload) => {
@@ -80,7 +97,7 @@ export const ProductListPage = () => {
         )}
       </div>
 
-            {/* Toolbar */}
+      {/* Toolbar */}
       <ProductToolbar
         keyword={keyword}
         status={status}
@@ -104,6 +121,7 @@ export const ProductListPage = () => {
           onToggleStatus={handleToggle}
           onEdit={handleEdit}
           onView={setViewing}
+          onDelete={handleDelete}
         />
         {totalElements > 0 && (
           <Pagination
@@ -128,7 +146,7 @@ export const ProductListPage = () => {
         onSubmit={handleSubmit}
       />
 
-            {/* Detail Drawer */}
+      {/* Detail Drawer */}
       <ProductDetailDrawer
         open={!!viewing}
         product={viewing}
@@ -138,6 +156,20 @@ export const ProductListPage = () => {
           setEditing(p);
           setModalOpen(true);
         }}
+      />
+
+      {/* Confirm delete */}
+      <ConfirmDialog
+        open={!!deleting}
+        title="Xóa sản phẩm"
+        message={
+          <>
+            Bạn có chắc muốn xóa sản phẩm <strong>{deleting?.name}</strong>? Hành động này không thể hoàn tác.
+          </>
+        }
+        loading={deleteMutation.isPending}
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleting(null)}
       />
     </div>
   );

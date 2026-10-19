@@ -1,4 +1,4 @@
-package com.freshvend.identity_service.dto.request;
+package com.example.app.dto;
 
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.Size;

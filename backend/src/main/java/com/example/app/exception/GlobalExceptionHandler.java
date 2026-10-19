@@ -1,6 +1,6 @@
-package com.freshvend.identity_service.exception;
+package com.example.app.exception;
 
-import com.freshvend.identity_service.dto.response.ApiResponse;
+import com.example.app.dto.ApiResponse;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;

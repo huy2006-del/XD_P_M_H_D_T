@@ -25,7 +25,7 @@ public class ProductService {
     public Page<ProductResponse> list(int page, int size, String keyword, Boolean active) {
         if (page < 0) throw new IllegalArgumentException("page must be >= 0");
         if (size < 1 || size > 100) throw new IllegalArgumentException("size must be between 1 and 100");
-        return repository.search(blankToNull(keyword), active,
+        return repository.search(blankToEmpty(keyword), active,
                 PageRequest.of(page, size, Sort.by(Sort.Direction.ASC, "id"))).map(ProductResponse::from);
     }
 
@@ -55,11 +55,16 @@ public class ProductService {
         return ProductResponse.from(repository.save(p));
     }
 
+    public void delete(Long id) {
+        Product p = find(id);
+        repository.delete(p);
+    }
+
     private Product find(Long id) { return repository.findById(id).orElseThrow(() -> new ResourceNotFoundException("Product", id)); }
     private void validate(ProductRequest r) {
         if (!UNITS.contains(r.unit())) throw new IllegalArgumentException("unit must be one of: kg, hộp, quả, phần");
         if (r.minTempC().compareTo(r.maxTempC()) > 0) throw new IllegalArgumentException("minTempC must be less than or equal to maxTempC");
     }
     private String clean(String value) { return value.trim(); }
-    private String blankToNull(String value) { return value == null || value.isBlank() ? null : value.trim(); }
+    private String blankToEmpty(String value) { return value == null ? "" : value.trim(); }
 }

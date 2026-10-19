@@ -1,6 +1,6 @@
-package com.freshvend.identity_service.repository;
+package com.example.app.repository;
 
-import com.freshvend.identity_service.entity.User;
+import com.example.app.entity.User;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface UserRepository extends JpaRepository<User, String> {

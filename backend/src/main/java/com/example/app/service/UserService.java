@@ -1,9 +1,9 @@
-package com.freshvend.identity_service.service;
+package com.example.app.service;
 
-import com.freshvend.identity_service.dto.request.UserCreationRequest;
-import com.freshvend.identity_service.dto.response.UserResponse;
-import com.freshvend.identity_service.entity.User;
-import com.freshvend.identity_service.repository.UserRepository;
+import com.example.app.dto.UserCreationRequest;
+import com.example.app.dto.UserResponse;
+import com.example.app.entity.User;
+import com.example.app.repository.UserRepository;
 import lombok.AccessLevel;
 import lombok.experimental.FieldDefaults;
 import org.springframework.stereotype.Service;

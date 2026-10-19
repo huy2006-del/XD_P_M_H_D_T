@@ -13,6 +13,7 @@ interface ProductTableProps {
   onToggleStatus: (product: Product, next: boolean) => void;
   onEdit: (product: Product) => void;
   onView: (product: Product) => void;
+  onDelete: (product: Product) => void;
 }
 
 export const ProductTable = ({
@@ -22,6 +23,7 @@ export const ProductTable = ({
   onToggleStatus,
   onEdit,
   onView,
+  onDelete,
 }: ProductTableProps) => {
   if (isLoading) {
     return (
@@ -34,7 +36,7 @@ export const ProductTable = ({
   if (products.length === 0) {
     return (
       <EmptyState
-        icon="🍎"
+        icon=""
         title="Chưa có sản phẩm nào"
         description="Bắt đầu bằng cách thêm sản phẩm trái cây đầu tiên cho hệ thống."
       />
@@ -71,7 +73,7 @@ export const ProductTable = ({
                     />
                   ) : (
                     <div className="flex h-full w-full items-center justify-center text-slate-300">
-                      🍇
+                      
                     </div>
                   )}
                 </div>
@@ -85,7 +87,7 @@ export const ProductTable = ({
               <td className="px-4 py-3">
                 <SafeTempBadge minTempC={p.minTempC} maxTempC={p.maxTempC} />
               </td>
-                            <td className="px-4 py-3">
+              <td className="px-4 py-3">
                 <ProductStatusSwitch
                   isActive={p.isActive}
                   loading={togglingId === p.id}
@@ -99,6 +101,9 @@ export const ProductTable = ({
                   </Button>
                   <Button variant="outline" size="sm" onClick={() => onEdit(p)}>
                     Sửa
+                  </Button>
+                  <Button variant="danger" size="sm" onClick={() => onDelete(p)}>
+                    Xóa
                   </Button>
                 </div>
               </td>

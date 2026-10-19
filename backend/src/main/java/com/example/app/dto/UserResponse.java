@@ -1,4 +1,4 @@
-package com.freshvend.identity_service.dto.response;
+package com.example.app.dto;
 
 import lombok.*;
 import lombok.experimental.FieldDefaults;

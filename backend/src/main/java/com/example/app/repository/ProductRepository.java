@@ -11,6 +11,6 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
     boolean existsBySkuIgnoreCase(String sku);
     boolean existsBySkuIgnoreCaseAndIdNot(String sku, Long id);
 
-    @Query("select p from Product p where (:keyword is null or lower(p.name) like lower(concat('%', :keyword, '%'))) and (:active is null or p.isActive = :active)")
+    @Query("select p from Product p where lower(p.name) like lower(concat('%', :keyword, '%')) and (:active is null or p.isActive = :active)")
     Page<Product> search(@Param("keyword") String keyword, @Param("active") Boolean active, Pageable pageable);
 }

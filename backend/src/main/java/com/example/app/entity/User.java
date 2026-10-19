@@ -1,4 +1,4 @@
-package com.freshvend.identity_service.entity;
+package com.example.app.entity;
 
 import jakarta.persistence.*;
 import lombok.*;

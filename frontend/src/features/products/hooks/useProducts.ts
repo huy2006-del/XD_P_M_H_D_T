@@ -86,3 +86,17 @@ export const useToggleProductStatus = () => {
     onSettled: () => qc.invalidateQueries({ queryKey: productKeys.all }),
   });
 };
+
+export const useDeleteProduct = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => productsApi.remove(id),
+    onSuccess: () => {
+      toast.success('Đã xóa sản phẩm');
+      qc.invalidateQueries({ queryKey: productKeys.all });
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.message ?? 'Xóa sản phẩm thất bại');
+    },
+  });
+};
