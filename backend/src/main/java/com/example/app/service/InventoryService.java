@@ -3,12 +3,16 @@ package com.example.app.service;
 import com.example.app.dto.DispenseResultDTO;
 import com.example.app.dto.SlotInventoryItem;
 import com.example.app.entity.FruitBatch;
+import com.example.app.entity.MachineSlot;
+import com.example.app.entity.MachineSlotStatus;
 import com.example.app.entity.MovementType;
 import com.example.app.entity.SlotBatchInventory;
 import com.example.app.entity.StockMovement;
 import com.example.app.exception.InsufficientStockException;
+import com.example.app.exception.BusinessRuleException;
 import com.example.app.exception.ResourceNotFoundException;
 import com.example.app.repository.FruitBatchRepository;
+import com.example.app.repository.MachineSlotRepository;
 import com.example.app.repository.SlotBatchInventoryRepository;
 import com.example.app.repository.StockMovementRepository;
 import org.springframework.stereotype.Service;
@@ -24,12 +28,14 @@ public class InventoryService {
     private final SlotBatchInventoryRepository slotInventory;
     private final FruitBatchRepository batches;
     private final StockMovementRepository movements;
+    private final MachineSlotRepository machineSlots;
 
     public InventoryService(SlotBatchInventoryRepository slotInventory, FruitBatchRepository batches,
-                            StockMovementRepository movements) {
+                            StockMovementRepository movements, MachineSlotRepository machineSlots) {
         this.slotInventory = slotInventory;
         this.batches = batches;
         this.movements = movements;
+        this.machineSlots = machineSlots;
     }
 
     /**
@@ -39,6 +45,11 @@ public class InventoryService {
     @Transactional
     public DispenseResultDTO dispenseFIFO(Long slotId, int quantityToDispense) {
         if (quantityToDispense < 1) throw new IllegalArgumentException("quantityToDispense must be >= 1");
+        machineSlots.findById(slotId).ifPresent(slot -> {
+            if (slot.getStatus() == MachineSlotStatus.JAMMED) {
+                throw new BusinessRuleException("Không thể xuất hàng vì khay đang bị kẹt.");
+            }
+        });
 
         // Đã khóa dòng (PESSIMISTIC_WRITE) và sắp theo hạn dùng; sort lại ở đây để thuật toán không phụ thuộc DB.
         List<SlotBatchInventory> queue = new ArrayList<>(slotInventory.lockSellableQueue(slotId, LocalDate.now()));
@@ -69,6 +80,8 @@ public class InventoryService {
                     batch.getId(), batch.getBatchCode(), batch.getExpiryDate(), take));
             remaining -= take;
         }
+        machineSlots.findById(slotId).ifPresent(slot ->
+                slot.updateStock((int) slotInventory.sumQuantityBySlotId(slotId)));
         return new DispenseResultDTO(slotId, quantityToDispense, quantityToDispense, deductions);
     }
 
@@ -88,9 +101,23 @@ public class InventoryService {
         }
         SlotBatchInventory row = slotInventory.findBySlotIdAndBatchId(slotId, batchId)
                 .orElseGet(() -> new SlotBatchInventory(slotId, batch, 0));
+        long stockAfterLoad = slotInventory.sumQuantityBySlotId(slotId) + quantity;
+        MachineSlot machineSlot = machineSlots.findById(slotId).orElse(null);
+        if (machineSlot != null) {
+            if (stockAfterLoad > machineSlot.getCapacity()) {
+                throw new BusinessRuleException("Số lượng nạp vượt quá sức chứa của khay.");
+            }
+            if (machineSlot.getProduct() != null
+                    && !machineSlot.getProduct().getId().equals(batch.getProduct().getId())) {
+                throw new BusinessRuleException("Lô hàng không khớp với sản phẩm đã gán cho khay.");
+            }
+        }
         row.add(quantity);
         slotInventory.save(row);
         movements.save(new StockMovement(slotId, batch, MovementType.LOAD, quantity));
+        if (machineSlot != null) {
+            machineSlot.updateStock((int) stockAfterLoad);
+        }
         return SlotInventoryItem.from(row);
     }
 

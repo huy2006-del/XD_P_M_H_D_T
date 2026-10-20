@@ -1,11 +1,12 @@
 package com.example.app.controller;
 
-import com.example.app.dto.MachineRequest;
-import com.example.app.dto.MachineResponse;
-import com.example.app.dto.MachineStatusRequest;
+import com.example.app.dto.request.MachineRequest;
+import com.example.app.dto.request.MachineStatusRequest;
+import com.example.app.dto.response.MachineResponse;
 import com.example.app.entity.MachineStatus;
 import com.example.app.service.VendingMachineService;
 import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -21,14 +22,11 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
 @RestController
+@RequiredArgsConstructor
 @RequestMapping("/api/v1/machines")
 public class VendingMachineController {
 
     private final VendingMachineService machineService;
-
-    public VendingMachineController(VendingMachineService machineService) {
-        this.machineService = machineService;
-    }
 
     @GetMapping
     public List<MachineResponse> getAll(
