@@ -1,4 +1,4 @@
-package com.example.app.dto;
+package com.example.app.dto.request;
 
 import com.example.app.entity.MachineStatus;
 import jakarta.validation.constraints.NotNull;

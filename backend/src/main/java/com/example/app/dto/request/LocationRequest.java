@@ -1,4 +1,4 @@
-package com.example.app.dto;
+package com.example.app.dto.request;
 
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;

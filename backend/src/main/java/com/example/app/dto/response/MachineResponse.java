@@ -1,9 +1,11 @@
-package com.example.app.dto;
+package com.example.app.dto.response;
 
+import com.example.app.dto.response.OperatorResponse;
 import com.example.app.entity.VendingMachine;
 import com.fasterxml.jackson.annotation.JsonInclude;
 
-import java.time.Instant;
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record MachineResponse(
@@ -13,10 +15,14 @@ public record MachineResponse(
         String model,
         String status,
         LocationSummary location,
+        String locationName,
         OperatorResponse operator,
-        Instant lastPingAt
+        LocalDateTime lastPingAt,
+        BigDecimal tempMinThreshold,
+        BigDecimal tempMaxThreshold,
+        Double currentTemp
 ) {
-    public static MachineResponse from(VendingMachine machine) {
+    public static MachineResponse from(VendingMachine machine, Double currentTemp) {
         return new MachineResponse(
                 machine.getId(),
                 machine.getSerialNumber(),
@@ -28,8 +34,12 @@ public record MachineResponse(
                         machine.getLocation().getName(),
                         machine.getLocation().getAddress()
                 ),
+                machine.getLocation().getName(),
                 OperatorResponse.from(machine.getOperator()),
-                machine.getLastPingAt()
+                machine.getLastPingAt(),
+                machine.getTempMinThreshold(),
+                machine.getTempMaxThreshold(),
+                currentTemp
         );
     }
 

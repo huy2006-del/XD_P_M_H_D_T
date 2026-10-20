@@ -89,6 +89,19 @@ INSERT INTO operators (full_name) VALUES ('Nguyễn Văn Vận Hành') RETURNING
 - `POST /api/v1/machines` (returns `201 Created`; serial number must be unique)
 - `PUT /api/v1/machines/{id}`
 - `PATCH /api/v1/machines/{id}/status` with `{"status":"MAINTENANCE"}`
+- `GET /api/v1/machines/{id}/slots`
+- `POST /api/v1/machines/{id}/slots`
+- `PUT /api/v1/slots/{slotId}` and `DELETE /api/v1/slots/{slotId}`
+- `PATCH /api/v1/slots/{slotId}/status` with `{"status":"JAMMED"}`
+- `GET /api/v1/machines/{id}/telemetry/latest`
+- `GET /api/v1/machines/{id}/telemetry/history?limit=30`
+- `POST /api/v1/simulator/machines/{id}/temp-spike?temp=13.5`
+- `POST /api/v1/simulator/machines/{id}/toggle-power`
+
+The virtual IoT simulator records readings every 10 seconds for ONLINE
+machines, with temperature in the 3.5–6.5 °C range and humidity in the
+80–90% range. Slot stock mirrors load/dispense operations made through the
+existing slot batch inventory API.
 
 Create a location with `name`, `address`, `city`, and optional `latitude` and
 `longitude`. Machine create/update requests accept `serialNumber`, `name`,

@@ -14,7 +14,8 @@ import jakarta.persistence.Table;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
-import java.time.Instant;
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "vending_machines")
@@ -51,17 +52,38 @@ public class VendingMachine {
     private Operator operator;
 
     @Column(name = "last_ping_at")
-    private Instant lastPingAt;
+    private LocalDateTime lastPingAt;
+
+    @Column(name = "temp_min_threshold", nullable = false, precision = 5, scale = 2)
+    private BigDecimal tempMinThreshold = new BigDecimal("2.00");
+
+    @Column(name = "temp_max_threshold", nullable = false, precision = 5, scale = 2)
+    private BigDecimal tempMaxThreshold = new BigDecimal("8.00");
 
     protected VendingMachine() {
     }
 
     public VendingMachine(String serialNumber, String name, String model, Location location, Operator operator) {
+        this(serialNumber, name, model, location, operator,
+                new BigDecimal("2.00"), new BigDecimal("8.00"));
+    }
+
+    public VendingMachine(
+            String serialNumber,
+            String name,
+            String model,
+            Location location,
+            Operator operator,
+            BigDecimal tempMinThreshold,
+            BigDecimal tempMaxThreshold
+    ) {
         this.serialNumber = serialNumber;
         this.name = name;
         this.model = model;
         this.location = location;
         this.operator = operator;
+        this.tempMinThreshold = tempMinThreshold;
+        this.tempMaxThreshold = tempMaxThreshold;
     }
 
     public Long getId() {
@@ -92,19 +114,38 @@ public class VendingMachine {
         return operator;
     }
 
-    public Instant getLastPingAt() {
+    public LocalDateTime getLastPingAt() {
         return lastPingAt;
     }
 
-    public void update(String serialNumber, String name, String model, Location location, Operator operator) {
+    public BigDecimal getTempMinThreshold() {
+        return tempMinThreshold;
+    }
+
+    public BigDecimal getTempMaxThreshold() {
+        return tempMaxThreshold;
+    }
+
+    public void update(String serialNumber, String name, String model, Location location, Operator operator,
+                       BigDecimal tempMinThreshold, BigDecimal tempMaxThreshold) {
         this.serialNumber = serialNumber;
         this.name = name;
         this.model = model;
         this.location = location;
         this.operator = operator;
+        this.tempMinThreshold = tempMinThreshold;
+        this.tempMaxThreshold = tempMaxThreshold;
     }
 
     public void changeStatus(MachineStatus status) {
         this.status = status;
+    }
+
+    public void updateLastPingAt(LocalDateTime lastPingAt) {
+        this.lastPingAt = lastPingAt;
+    }
+
+    public void togglePower() {
+        this.status = this.status == MachineStatus.ONLINE ? MachineStatus.OFFLINE : MachineStatus.ONLINE;
     }
 }

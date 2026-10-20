@@ -1,4 +1,4 @@
-package com.example.app.dto;
+package com.example.app.dto.response;
 
 import com.example.app.entity.Operator;
 

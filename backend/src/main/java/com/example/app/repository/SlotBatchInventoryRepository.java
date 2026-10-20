@@ -26,6 +26,11 @@ public interface SlotBatchInventoryRepository extends JpaRepository<SlotBatchInv
 
     Optional<SlotBatchInventory> findBySlotIdAndBatchId(Long slotId, Long batchId);
 
+    boolean existsBySlotIdAndQuantityGreaterThan(Long slotId, int quantity);
+
+    @Query("select coalesce(sum(s.quantity), 0) from SlotBatchInventory s where s.slotId = :slotId")
+    long sumQuantityBySlotId(@Param("slotId") Long slotId);
+
     @Query("select coalesce(sum(s.quantity), 0) from SlotBatchInventory s where s.batch.id = :batchId")
     long sumQuantityByBatchId(@Param("batchId") Long batchId);
 }

@@ -14,6 +14,8 @@ public interface VendingMachineRepository extends JpaRepository<VendingMachine, 
 
     boolean existsBySerialNumberAndIdNot(String serialNumber, Long id);
 
+    List<VendingMachine> findByStatus(MachineStatus status);
+
     @EntityGraph(attributePaths = {"location", "operator"})
     List<VendingMachine> findAllByOrderByIdAsc();
 
