@@ -1,4 +1,3 @@
-
 import { lazy, Suspense } from "react";
 import { createBrowserRouter, Navigate } from "react-router-dom";
 
@@ -11,6 +10,7 @@ import RequireRole from "./guards/RequireRole";
 import LoginPage from "../features/auth/LoginPage";
 import { ProductListPage } from "../features/products/pages/ProductListPage";
 import { ROUTES } from "../shared/constants/routes";
+import KioskSimulator from "../features/kiosk/KioskSimulator";
 
 // FE3 - Fleet Dashboard
 const FleetDashboard = lazy(
@@ -25,6 +25,10 @@ export const router = createBrowserRouter([
   {
     path: "/login",
     element: <LoginPage />,
+  },
+  {
+    path: "/kiosk-simulator",
+    element: <KioskSimulator />,
   },
   {
     path: "/403",
