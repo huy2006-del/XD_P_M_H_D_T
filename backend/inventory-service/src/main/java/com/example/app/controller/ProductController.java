@@ -30,3 +30,36 @@ public class ProductController {
     @GetMapping
     public Map<String, Object> list(@RequestParam(defaultValue = "0") int page,
                                     @RequestParam(defaultValue = "10") int size,
+                                    @RequestParam(required = false) String keyword,
+                                    @RequestParam(required = false) Boolean active,
+                                    @RequestParam(required = false) Boolean isActive) {
+        Boolean status = isActive != null ? isActive : active;
+        Page<ProductResponse> result = service.list(page, size, keyword, status);
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("content", result.getContent());
+        body.put("page", result.getNumber());
+        body.put("size", result.getSize());
+        body.put("totalElements", result.getTotalElements());
+        body.put("totalPages", result.getTotalPages());
+        return body;
+    }
+
+    @GetMapping("/{id}")
+    public ProductResponse get(@PathVariable Long id) { return service.get(id); }
+
+    @PostMapping
+    @ResponseStatus(HttpStatus.CREATED)
+    public ProductResponse create(@Valid @RequestBody ProductRequest request) { return service.create(request); }
+
+    @PutMapping("/{id}")
+    public ProductResponse update(@PathVariable Long id, @Valid @RequestBody ProductRequest request) { return service.update(id, request); }
+
+    @PatchMapping("/{id}/status")
+    public ProductResponse status(@PathVariable Long id, @Valid @RequestBody ProductStatusRequest request) {
+        return service.changeStatus(id, request.isActive());
+    }
+
+    @DeleteMapping("/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void delete(@PathVariable Long id) { service.delete(id); }
+}
