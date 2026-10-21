@@ -1,3 +1,4 @@
+
 import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { login, USE_MOCK_AUTH } from "./authService";
@@ -32,12 +33,16 @@ export default function LoginPage() {
     return "/operator/dashboard";
   };
 
-  const handleLogin = async (event: FormEvent<HTMLFormElement>) => {
+  const handleLogin = async (
+    event: FormEvent<HTMLFormElement>
+  ) => {
     event.preventDefault();
     setError("");
 
     if (!username.trim() || !password.trim()) {
-      setError("Vui lòng nhập đầy đủ tên đăng nhập và mật khẩu.");
+      setError(
+        "Vui lòng nhập đầy đủ tên đăng nhập và mật khẩu."
+      );
       return;
     }
 
@@ -49,7 +54,7 @@ export default function LoginPage() {
         password,
       });
 
-      // Lưu token và thông tin người dùng vào Zustand.
+      // Lưu token và thông tin người dùng.
       setAuth(result.token, result.user);
 
       // Điều hướng theo vai trò.
@@ -60,7 +65,9 @@ export default function LoginPage() {
       if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError("Đăng nhập thất bại. Vui lòng thử lại.");
+        setError(
+          "Đăng nhập thất bại. Vui lòng thử lại."
+        );
       }
     } finally {
       setLoading(false);
@@ -70,6 +77,8 @@ export default function LoginPage() {
   return (
     <div className="login-page">
       <div className="login-container">
+
+        {/* Logo và tên thương hiệu căn giữa */}
         <div className="login-brand">
           <div className="login-logo">
             <Apple size={36} strokeWidth={2.2} />
@@ -79,14 +88,21 @@ export default function LoginPage() {
           <p>IOT SMART MANAGEMENT</p>
         </div>
 
+        {/* Khung đăng nhập */}
         <div className="login-card">
+
+          {/* Tiêu đề căn giữa */}
           <p className="login-subtitle">
             Sign in to your FreshVend account
           </p>
 
           <form onSubmit={handleLogin} noValidate>
+
+            {/* Username */}
             <div className="login-field">
-              <label htmlFor="username">Username</label>
+              <label htmlFor="username">
+                Username
+              </label>
 
               <div className="login-input-wrapper">
                 <UserRound size={19} />
@@ -96,25 +112,34 @@ export default function LoginPage() {
                   type="text"
                   placeholder="Enter your username"
                   value={username}
-                  onChange={(e) => setUsername(e.target.value)}
+                  onChange={(e) =>
+                    setUsername(e.target.value)
+                  }
                   autoComplete="username"
                   disabled={loading}
                 />
               </div>
             </div>
 
+            {/* Password */}
             <div className="login-field">
-              <label htmlFor="password">Password</label>
+              <label htmlFor="password">
+                Password
+              </label>
 
               <div className="login-input-wrapper">
                 <LockKeyhole size={19} />
 
                 <input
                   id="password"
-                  type={showPassword ? "text" : "password"}
+                  type={
+                    showPassword ? "text" : "password"
+                  }
                   placeholder="Enter your password"
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={(e) =>
+                    setPassword(e.target.value)
+                  }
                   autoComplete="current-password"
                   disabled={loading}
                 />
@@ -122,9 +147,13 @@ export default function LoginPage() {
                 <button
                   type="button"
                   className="login-eye-button"
-                  onClick={() => setShowPassword(!showPassword)}
+                  onClick={() =>
+                    setShowPassword(!showPassword)
+                  }
                   aria-label={
-                    showPassword ? "Hide password" : "Show password"
+                    showPassword
+                      ? "Hide password"
+                      : "Show password"
                   }
                 >
                   {showPassword ? (
@@ -136,13 +165,18 @@ export default function LoginPage() {
               </div>
             </div>
 
+            {/* Thông báo lỗi */}
             {error && (
-              <div className="login-error" role="alert">
+              <div
+                className="login-error"
+                role="alert"
+              >
                 <CircleAlert size={17} />
                 <span>{error}</span>
               </div>
             )}
 
+            {/* Nút đăng nhập */}
             <button
               className="login-submit"
               type="submit"
@@ -161,24 +195,21 @@ export default function LoginPage() {
               )}
             </button>
 
+            {/* Thông báo Mock Authentication */}
             {USE_MOCK_AUTH && (
-              <p
-                style={{
-                  marginTop: 12,
-                  fontSize: 12,
-                  textAlign: "center",
-                  color: "#64748b",
-                }}
-              >
+              <p className="login-mock-notice">
                 Development Mode – Mock Authentication
               </p>
             )}
           </form>
         </div>
 
+        {/* Footer */}
         <p className="login-footer">
-          © 2026 FreshVend Systems. All rights reserved.
+          © 2026 FreshVend Systems.
+          All rights reserved.
         </p>
+
       </div>
     </div>
   );
