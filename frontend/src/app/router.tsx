@@ -11,6 +11,7 @@ import LoginPage from "../features/auth/LoginPage";
 import { ProductListPage } from "../features/products/pages/ProductListPage";
 import { ROUTES } from "../shared/constants/routes";
 import KioskSimulator from "../features/kiosk/KioskSimulator";
+import MachineSlotsPage from "../features/slots/pages/MachineSlotsPage";
 
 // FE3 - Fleet Dashboard
 const FleetDashboard = lazy(
@@ -73,6 +74,10 @@ export const router = createBrowserRouter([
                     <FleetDashboard />
                   </Suspense>
                 ),
+              },
+              {
+                path: "machines/:machineId/slots",
+                element: <MachineSlotsPage />,
               },
             ],
           },
