@@ -28,3 +28,33 @@ public class StockMovement {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "batch_id", nullable = false)
     private FruitBatch batch;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private MovementType type;
+
+    @Column(nullable = false)
+    private int quantity;
+
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private Instant createdAt;
+
+    protected StockMovement() {}
+
+    public StockMovement(Long slotId, FruitBatch batch, MovementType type, int quantity) {
+        this.slotId = slotId;
+        this.batch = batch;
+        this.type = type;
+        this.quantity = quantity;
+    }
+
+    @PrePersist
+    void onCreate() { createdAt = Instant.now(); }
+
+    public Long getId() { return id; }
+    public Long getSlotId() { return slotId; }
+    public FruitBatch getBatch() { return batch; }
+    public MovementType getType() { return type; }
+    public int getQuantity() { return quantity; }
+    public Instant getCreatedAt() { return createdAt; }
+}
