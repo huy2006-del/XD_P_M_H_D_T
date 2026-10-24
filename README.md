@@ -68,9 +68,12 @@ folder with `npm ci`. For a production frontend build, run `npm run build`.
 
 ## Database configuration
 
-The backend connects to PostgreSQL at `localhost:5433` by default. You can
-override the connection with `DB_URL` and `DB_USERNAME`; `SERVER_PORT` changes
-the HTTP port.
+The backend connects to the `freshvend_app` database on PostgreSQL at
+`localhost:5433` by default. You can override the connection with `DB_URL` and
+`DB_USERNAME`; `SERVER_PORT` changes the HTTP port. If you already had a
+`freshvend_db` database, it is left untouched; the current backend uses the new
+`freshvend_app` database so its schema can be created without changing the old
+data.
 
 The `operators` table provides the minimal operator reference (`id`, `full_name`)
 used by vending machines. Populate it from your employee-management module or

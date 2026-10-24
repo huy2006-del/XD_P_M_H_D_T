@@ -8,7 +8,7 @@ services:
     environment:
       POSTGRES_USER: freshvend_user
       POSTGRES_PASSWORD: freshvend_secret_password
-      POSTGRES_DB: freshvend_db
+      POSTGRES_DB: freshvend_app
     ports:
       - "5433:5432"
     volumes:
