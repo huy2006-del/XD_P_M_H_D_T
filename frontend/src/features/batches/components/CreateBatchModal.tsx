@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CreateBatchRequest } from '../types';
+import type { CreateBatchRequest } from '../types';
 import { generateLotCode } from '../../../shared/utils/dateUtils';
 
 interface Props {

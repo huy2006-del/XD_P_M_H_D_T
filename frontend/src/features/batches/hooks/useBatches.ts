@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios'; // Hoặc dùng apiClient của bạn
-import { FruitBatch, CreateBatchRequest } from '../types';
+import type { FruitBatch, CreateBatchRequest } from '../types';
 
 const API_URL = '/api/v1/batches'; // Thay bằng base URL thực tế của bạn
 
@@ -26,7 +26,6 @@ export const useBatches = () => {
     try {
       await axios.post(API_URL, data);
       await fetchBatches(); // Refresh lại danh sách sau khi thêm
-      return true;
     } catch (err: any) {
       throw new Error(err.response?.data?.message || 'Lỗi khi tạo lô hàng mới');
     }

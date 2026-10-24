@@ -1,5 +1,5 @@
 import React from 'react';
-import { FruitBatch } from '../types';
+import type { FruitBatch } from '../types';
 import { ExpiryBadge } from './ExpiryBadge';
 import { formatDate } from '../../../shared/utils/dateUtils';
 

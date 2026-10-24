@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
-import { MachineSlot } from '../types';
+import type { MachineSlot } from '../slotTypes';
 
 export const useMachineSlots = (machineId: number) => {
   const [slots, setSlots] = useState<MachineSlot[]>([]);

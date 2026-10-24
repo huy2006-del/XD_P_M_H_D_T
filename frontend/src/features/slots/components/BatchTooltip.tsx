@@ -1,5 +1,5 @@
 import React from 'react';
-import { SlotBatchDetail } from '../types';
+import type { SlotBatchDetail } from '../slotTypes';
 import { getDaysUntilExpiry } from '../../../shared/utils/dateUtils';
 
 export const BatchTooltip: React.FC<{ batches?: SlotBatchDetail[] }> = ({ batches }) => {
