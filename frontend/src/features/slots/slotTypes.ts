@@ -1,16 +1,3 @@
-
-export type MachineSlot = {
-  slotId: number;
-  slotCode: string;
-  capacity: number;
-  currentStock: number;
-  status: string;
-  productId: number | null;
-  productName: string | null;
-  productPrice: number | null;
-  productImageUrl: string | null;
-};
-
 Hoàng Đỗ Gia Huy
 export interface SlotBatchDetail {
   batchId: number;
@@ -30,4 +17,29 @@ export interface MachineSlot {
   current_stock: number;
   status: 'ACTIVE' | 'JAMMED' | 'EMPTY';
   batches?: SlotBatchDetail[]; // Dữ liệu cho Tooltip
+}
+
+Dương Quốc Anh
+export interface SlotBatchDetail {
+  batchId: number;
+  batchCode: string;
+  expiryDate: string;
+  quantity: number;
+}
+export interface MachineSlot {
+  // Thông tin hộc chứa
+  slotId: number;
+  slotCode: string;
+  capacity: number;
+  currentStock: number;
+  status: string;
+
+  // Thông tin sản phẩm
+  productId: number | null;
+  productName: string | null;
+  productPrice: number | null;
+  productImageUrl: string | null;
+
+  // Danh sách lô hàng (không bắt buộc)
+  batches?: SlotBatchDetail[];
 }
