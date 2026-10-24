@@ -2,7 +2,7 @@ spring:
   application:
     name: freshvend-backend
   datasource:
-    url: ${DB_URL:jdbc:postgresql://localhost:5433/freshvend_db}
+    url: ${DB_URL:jdbc:postgresql://localhost:5433/freshvend_app}
     username: ${DB_USERNAME:freshvend_user}
     password: ${DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
