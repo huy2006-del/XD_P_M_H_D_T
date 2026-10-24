@@ -1,23 +1,17 @@
-package com.freshvend.identity_service.repository;
+package com.example.app.repository;
 
-import com.freshvend.identity_service.entity.AuditLog;
+import com.example.app.entity.AuditLog;
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.repository.query.Param;
+// import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
 import java.util.List;
 
 public interface AuditLogRepository extends JpaRepository<AuditLog, Long> {
 
-    @Query("SELECT a FROM AuditLog a WHERE " +
-           "(:userId IS NULL OR a.userId = :userId) AND " +
-           "(:startDate IS NULL OR a.createdAt >= :startDate) AND " +
-           "(:endDate IS NULL OR a.createdAt <= :endDate) " +
-           "ORDER BY a.createdAt DESC")
-    List<AuditLog> filterAuditLogs(
-            @Param("userId") Long userId,
-            @Param("startDate") LocalDateTime startDate,
-            @Param("endDate") LocalDateTime endDate
-    );
+    List<AuditLog> findByUserId(Long userId);
+
+    List<AuditLog> findByCreatedAtBetween(LocalDateTime startDate, LocalDateTime endDate);
+
+    List<AuditLog> findByUserIdAndCreatedAtBetween(Long userId, LocalDateTime startDate, LocalDateTime endDate);
 }

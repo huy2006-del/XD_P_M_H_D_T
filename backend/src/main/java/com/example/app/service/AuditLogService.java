@@ -1,57 +1,59 @@
-package com.freshvend.identity_service.service;
+package com.example.app.service;
 
-import com.freshvend.identity_service.dto.AuditLogResponse;
-import com.freshvend.identity_service.entity.AuditLog;
-import com.freshvend.identity_service.enums.ActionType;
-import com.freshvend.identity_service.enums.EntityType;
-import com.freshvend.identity_service.repository.AuditLogRepository;
+import com.example.app.dto.AuditLogResponse;
+import com.example.app.entity.ActionType;
+import com.example.app.entity.AuditLog;
+import com.example.app.entity.EntityType;
+import com.example.app.repository.AuditLogRepository;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.stream.Collectors;
 
 @Service
 public class AuditLogService {
 
     private final AuditLogRepository auditLogRepository;
 
-    // Constructor injection viết tay
     public AuditLogService(AuditLogRepository auditLogRepository) {
         this.auditLogRepository = auditLogRepository;
     }
 
-    // Tắt cảnh báo null safety
-    @SuppressWarnings("null")
     public void logActivity(Long userId, String username, ActionType action, EntityType entityName, String entityId, String details) {
-        auditLogRepository.save(AuditLog.builder()
+        AuditLog auditLog = AuditLog.builder()
                 .userId(userId)
                 .username(username)
                 .action(action)
                 .entityName(entityName)
                 .entityId(entityId)
                 .details(details)
-                .build());
-    }
-
-    // Hàm lấy danh sách log theo bộ lọc
-    public List<AuditLogResponse> getAuditLogs(Long userId, LocalDateTime startDate, LocalDateTime endDate) {
-        return auditLogRepository.filterAuditLogs(userId, startDate, endDate)
-                .stream()
-                .map(this::mapToResponse)
-                .collect(Collectors.toList());
-    }
-
-    private AuditLogResponse mapToResponse(AuditLog log) {
-        return AuditLogResponse.builder()
-                .id(log.getId())
-                .userId(log.getUserId())
-                .username(log.getUsername())
-                .action(log.getAction())
-                .entityName(log.getEntityName())
-                .entityId(log.getEntityId())
-                .details(log.getDetails())
-                .createdAt(log.getCreatedAt())
                 .build();
+
+        auditLogRepository.save(auditLog);
+    }
+
+    public List<AuditLogResponse> getAuditLogs(Long userId, LocalDateTime startDate, LocalDateTime endDate) {
+        List<AuditLog> logs;
+
+        if (userId != null && startDate != null && endDate != null) {
+            logs = auditLogRepository.findByUserIdAndCreatedAtBetween(userId, startDate, endDate);
+        } else if (userId != null) {
+            logs = auditLogRepository.findByUserId(userId);
+        } else if (startDate != null && endDate != null) {
+            logs = auditLogRepository.findByCreatedAtBetween(startDate, endDate);
+        } else {
+            logs = auditLogRepository.findAll();
+        }
+
+        return logs.stream().map(log -> new AuditLogResponse(
+                log.getId(),
+                log.getUserId(),
+                log.getUsername(),
+                log.getAction(),
+                log.getEntityName(),
+                log.getEntityId(),
+                log.getDetails(),
+                log.getCreatedAt()
+        )).toList();
     }
 }

@@ -1,8 +1,8 @@
-package com.freshvend.identity_service.controller;
+package com.example.app.controller;
 
-import com.freshvend.identity_service.dto.AuditLogResponse;
-import com.freshvend.identity_service.dto.response.ApiResponse;
-import com.freshvend.identity_service.service.AuditLogService;
+import com.example.app.dto.AuditLogResponse;
+import com.example.app.dto.ApiResponse;
+import com.example.app.service.AuditLogService;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
 

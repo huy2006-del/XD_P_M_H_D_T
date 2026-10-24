@@ -1,4 +1,4 @@
-package com.freshvend.identity_service.enums;
+package com.example.app.entity;
 
 public enum ActionType {
     CREATE,

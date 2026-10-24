@@ -1,7 +1,7 @@
-package com.freshvend.identity_service.annotation;
+package com.example.app.config;
 
-import com.freshvend.identity_service.enums.ActionType;
-import com.freshvend.identity_service.enums.EntityType;
+import com.example.app.entity.ActionType;
+import com.example.app.entity.EntityType;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;

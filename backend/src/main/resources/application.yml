@@ -4,7 +4,7 @@ spring:
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5433/freshvend_db}
     username: ${DB_USERNAME:freshvend_user}
-    password: ${DB_PASSWORD}
+    password: ${DB_PASSWORD:freshvend_secret_password}
     driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:

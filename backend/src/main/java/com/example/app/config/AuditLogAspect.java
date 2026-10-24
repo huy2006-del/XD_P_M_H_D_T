@@ -1,7 +1,6 @@
-package com.freshvend.identity_service.aspect;
+package com.example.app.config;
 
-import com.freshvend.identity_service.annotation.LogActivity;
-import com.freshvend.identity_service.service.AuditLogService;
+import com.example.app.service.AuditLogService;
 import org.aspectj.lang.JoinPoint;
 import org.aspectj.lang.annotation.AfterReturning;
 import org.aspectj.lang.annotation.Aspect;

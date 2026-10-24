@@ -1,6 +1,6 @@
-package com.freshvend.identity_service.client;
+package com.example.app.config;
 
-import com.freshvend.identity_service.dto.response.ApiResponse;
+import com.example.app.dto.ApiResponse;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
