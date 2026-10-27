@@ -27,29 +27,3 @@ public class SlotBatchInventory {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "batch_id", nullable = false)
     private FruitBatch batch;
-
-    @Column(nullable = false)
-    private int quantity;
-
-    protected SlotBatchInventory() {}
-
-    public SlotBatchInventory(Long slotId, FruitBatch batch, int quantity) {
-        this.slotId = slotId;
-        this.batch = batch;
-        this.quantity = quantity;
-    }
-
-    public void add(int amount) { this.quantity += amount; }
-
-    public void remove(int amount) {
-        if (amount <= 0 || amount > quantity) {
-            throw new IllegalStateException("Cannot remove " + amount + " from slot quantity " + quantity);
-        }
-        this.quantity -= amount;
-    }
-
-    public Long getId() { return id; }
-    public Long getSlotId() { return slotId; }
-    public FruitBatch getBatch() { return batch; }
-    public int getQuantity() { return quantity; }
-}
