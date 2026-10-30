@@ -50,6 +50,7 @@ Open the Vite URL printed in the terminal (normally `http://localhost:5173`).
 The backend does not yet implement authentication, so enable mock login for
 frontend development. Sign in with `admin` / `admin123` or `operator` /
 `operator123`.
+Directly access the Kiosk routing: http://localhost:5173/kiosk-simulator
 
 Stop each running server with `Ctrl+C`. Stop PostgreSQL from the repository root:
 
