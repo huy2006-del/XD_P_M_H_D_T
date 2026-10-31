@@ -1,15 +1,15 @@
 # FreshVend
 
-FreshVend has a Spring Boot backend, React/Vite frontend, and PostgreSQL
-database.
+FreshVend has a Maven multi-module Spring Boot microservices backend,
+React/Vite frontend, and PostgreSQL database.
 
-The backend includes Spring MVC, Bean Validation, Spring Data JPA, PostgreSQL,
-Lombok, Spring Boot DevTools, and the Spring Boot testing stack. Dependency
-versions are managed by the Spring Boot parent in `backend/pom.xml`.
+The backend modules are Eureka discovery, Spring Cloud Gateway, identity,
+inventory, and machine/cold-chain. Spring Boot, Spring Cloud, and JJWT versions
+are managed by `backend/pom.xml`.
 
 ## Run the whole project (Windows PowerShell)
 
-Install Java 17+, Maven, Node.js/npm, and start Docker Desktop. Open three
+Install Java 17+, Maven, Node.js/npm, and start Docker Desktop. Open separate
 PowerShell terminals at the repository root (`C:\XD_P_M_H_D_T`).
 
 **Terminal 1 — PostgreSQL:**
@@ -18,17 +18,39 @@ PowerShell terminals at the repository root (`C:\XD_P_M_H_D_T`).
 docker compose up -d postgres
 ```
 
-**Terminal 2 — backend:**
+**Terminals 2–6 — backend services (start discovery first):**
 
 ```powershell
-$env:DB_PASSWORD = "freshvend_secret_password"
 Set-Location backend
-mvn spring-boot:run
+mvn -pl discovery-server spring-boot:run
 ```
 
-The API listens on `http://localhost:8080`.
+In four more terminals, run:
 
-**Terminal 3 — frontend:**
+```powershell
+Set-Location backend
+mvn -pl identity-service spring-boot:run
+```
+
+```powershell
+Set-Location backend
+mvn -pl inventory-service spring-boot:run
+```
+
+```powershell
+Set-Location backend
+mvn -pl machine-coldchain-service spring-boot:run
+```
+
+```powershell
+Set-Location backend
+mvn -pl api-gateway spring-boot:run
+```
+
+The API Gateway listens on `http://localhost:8080`; Eureka is at
+`http://localhost:8761`.
+
+**Another terminal — frontend:**
 
 Install dependencies once (or again only after `package.json` / lockfile
 changes). Do not run `npm ci` while the Vite development server is running:
@@ -69,12 +91,23 @@ folder with `npm ci`. For a production frontend build, run `npm run build`.
 
 ## Database configuration
 
-The backend connects to the `freshvend_app` database on PostgreSQL at
-`localhost:5433` by default. You can override the connection with `DB_URL` and
-`DB_USERNAME`; `SERVER_PORT` changes the HTTP port. If you already had a
-`freshvend_db` database, it is left untouched; the current backend uses the new
-`freshvend_app` database so its schema can be created without changing the old
-data.
+The services use separate PostgreSQL databases on `localhost:5433`:
+`freshvend_identity`, `freshvend_inventory`, and `freshvend_machine`. A new
+PostgreSQL volume creates them from `database/init/01-create-service-databases.sql`.
+PostgreSQL only runs init scripts for an empty data volume. If you already have
+the FreshVend volume, create any missing databases manually without deleting
+the volume:
+
+```powershell
+docker exec freshvend_postgres psql -U freshvend_user -d postgres -c "CREATE DATABASE freshvend_identity;"
+docker exec freshvend_postgres psql -U freshvend_user -d postgres -c "CREATE DATABASE freshvend_inventory;"
+docker exec freshvend_postgres psql -U freshvend_user -d postgres -c "CREATE DATABASE freshvend_machine;"
+```
+
+Database URLs, usernames, passwords, ports, and the Eureka URL can be overridden
+with `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`, `SERVER_PORT`, and
+`EUREKA_SERVER_URL`. The previous monolithic database is not deleted or copied
+automatically; it remains available for a deliberate data migration.
 
 The `operators` table provides the minimal operator reference (`id`, `full_name`)
 used by vending machines. Populate it from your employee-management module or
@@ -115,21 +148,17 @@ optional `model`, `locationId`, and `operatorId`. New machines start as
 ## Build and test
 
 ```powershell
-cd backend
-mvn test
-mvn package
+Set-Location backend
+mvn clean install
 ```
 
 ## Package layout
 
-The Java source tree is `backend/src/main/java/com/example/app`. The base
-package is `com.example.app`; rename it to your project-specific package before
-adding application code.
+The Java base package remains `com.example.app`, now independently compiled in
+each service module.
 
-- `config` - application configuration
-- `controller` - HTTP endpoints
-- `dto` - request and response objects
-- `entity` - persistence entities
-- `exception` - application exceptions and error handling
-- `repository` - data access
-- `service` - business logic
+- `discovery-server` - Eureka service registry
+- `api-gateway` - reactive entry point on port 8080
+- `identity-service` - existing user management on port 8081
+- `inventory-service` - product, batch, FIFO stock on port 8082
+- `machine-coldchain-service` - locations, machines, slots, telemetry, simulator on port 8083
