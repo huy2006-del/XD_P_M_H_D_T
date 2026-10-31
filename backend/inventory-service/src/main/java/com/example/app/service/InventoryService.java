@@ -12,114 +12,40 @@ import com.example.app.exception.InsufficientStockException;
 import com.example.app.exception.BusinessRuleException;
 import com.example.app.exception.ResourceNotFoundException;
 import com.example.app.client.MachineSlotClient;
+import com.example.app.client.MachineSlotClient.MachineRestockSlot;
 import com.example.app.repository.FruitBatchRepository;
 import com.example.app.repository.SlotBatchInventoryRepository;
 import com.example.app.repository.StockMovementRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.jdbc.core.RowMapper;
+import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
+import java.util.TreeMap;
+import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 public class InventoryService {
-    private final SlotBatchInventoryRepository slotInventory;
-    private final FruitBatchRepository batches;
-    private final StockMovementRepository movements;
-    private final MachineSlotClient machineSlots;
-
-    public InventoryService(SlotBatchInventoryRepository slotInventory, FruitBatchRepository batches,
-                            StockMovementRepository movements, MachineSlotClient machineSlots) {
-        this.slotInventory = slotInventory;
-        this.batches = batches;
-        this.movements = movements;
-        this.machineSlots = machineSlots;
-    }
-
-    /**
-     * Task 2.3: trừ kho theo FIFO (lô hết hạn sớm nhất xuất trước).
-     * Lô đã quá hạn bị loại khỏi hàng đợi: không bán hàng hết hạn.
-     */
-    @Transactional
-    public DispenseResultDTO dispenseFIFO(Long slotId, int quantityToDispense) {
-        if (quantityToDispense < 1) throw new IllegalArgumentException("quantityToDispense must be >= 1");
-        MachineSlotInventoryResponse machineSlot = machineSlots.getSlot(slotId);
-        if ("JAMMED".equals(machineSlot.status())) {
-            throw new BusinessRuleException("Không thể xuất hàng vì khay đang bị kẹt.");
-        }
-
-        // Đã khóa dòng (PESSIMISTIC_WRITE) và sắp theo hạn dùng; sort lại ở đây để thuật toán không phụ thuộc DB.
-        List<SlotBatchInventory> queue = new ArrayList<>(slotInventory.lockSellableQueue(slotId, LocalDate.now()));
-        queue.sort(Comparator
-                .comparing((SlotBatchInventory s) -> s.getBatch().getExpiryDate())
-                .thenComparing(SlotBatchInventory::getId, Comparator.nullsLast(Comparator.naturalOrder())));
-
-        // Bước 1: đủ hàng không?
-        long available = queue.stream().mapToLong(SlotBatchInventory::getQuantity).sum();
-        if (available < quantityToDispense) {
-            throw new InsufficientStockException(slotId, quantityToDispense, available);
-        }
-
-        // Bước 2-3: trừ dần từng lô, thiếu thì sang lô kế tiếp.
-        int remaining = quantityToDispense;
-        List<DispenseResultDTO.BatchDeduction> deductions = new ArrayList<>();
-        for (SlotBatchInventory row : queue) {
-            if (remaining == 0) break;
-            int take = Math.min(remaining, row.getQuantity());
-            FruitBatch batch = row.getBatch();
-
-            row.remove(take);          // tồn của lô trong khay
-            batch.deduct(take);        // tồn còn lại của cả lô
-
-            // Bước 4: ghi lịch sử xuất kho
-            movements.save(new StockMovement(slotId, batch, MovementType.DISPENSE, take));
-            deductions.add(new DispenseResultDTO.BatchDeduction(
-                    batch.getId(), batch.getBatchCode(), batch.getExpiryDate(), take));
-            remaining -= take;
-        }
-        machineSlots.updateStock(slotId, new MachineSlotInventoryRequest(
-                (int) slotInventory.sumQuantityBySlotId(slotId)));
-        return new DispenseResultDTO(slotId, quantityToDispense, quantityToDispense, deductions);
-    }
-
-    /** Nạp một phần lô vào khay (cần để có dữ liệu tồn khay). */
-    @Transactional
-    public SlotInventoryItem loadToSlot(Long slotId, Long batchId, int quantity) {
-        if (quantity < 1) throw new IllegalArgumentException("quantity must be >= 1");
-        FruitBatch batch = batches.findByIdForUpdate(batchId)
-                .orElseThrow(() -> new ResourceNotFoundException("Batch", batchId));
-        if (batch.isExpired(LocalDate.now())) {
-            throw new IllegalArgumentException("Cannot load an expired batch: " + batch.getBatchCode());
-        }
-        long notYetLoaded = batch.getQuantityRemaining() - slotInventory.sumQuantityByBatchId(batchId);
-        if (quantity > notYetLoaded) {
-            throw new IllegalArgumentException("Batch " + batch.getBatchCode() + " only has " + notYetLoaded
-                    + " items not yet loaded into slots");
-        }
-        SlotBatchInventory row = slotInventory.findBySlotIdAndBatchId(slotId, batchId)
-                .orElseGet(() -> new SlotBatchInventory(slotId, batch, 0));
-        MachineSlotInventoryResponse machineSlot = machineSlots.getSlot(slotId);
-        long stockAfterLoad = slotInventory.sumQuantityBySlotId(slotId) + quantity;
-        if (stockAfterLoad > machineSlot.capacity()) {
-            throw new BusinessRuleException("Số lượng nạp vượt quá sức chứa của khay.");
-        }
-        if (machineSlot.productId() != null
-                && !machineSlot.productId().equals(batch.getProduct().getId())) {
-            throw new BusinessRuleException("Lô hàng không khớp với sản phẩm đã gán cho khay.");
-        }
-        row.add(quantity);
-        slotInventory.save(row);
-        movements.save(new StockMovement(slotId, batch, MovementType.LOAD, quantity));
-        machineSlots.updateStock(slotId, new MachineSlotInventoryRequest((int) stockAfterLoad));
-        return SlotInventoryItem.from(row);
-    }
-
-    /** Tồn kho của khay, lô hết hạn sớm nhất ở đầu. */
-    @Transactional(readOnly = true)
-    public List<SlotInventoryItem> getSlotInventory(Long slotId) {
-        return slotInventory.findBySlotIdAndQuantityGreaterThanOrderByBatchExpiryDateAsc(slotId, 0)
-                .stream().map(SlotInventoryItem::from).toList();
-    }
-}
+    private static final Logger log = LoggerFactory.getLogger(InventoryService.class);
