@@ -100,3 +100,54 @@ public class InventoryService {
 
         LocalDate today = LocalDate.now();
         // Hai khay có thể dùng chung nhiều lô. Khóa các lô theo ID trước khi lấy hàng đợi FEFO.
+        slotInventory.lockSellableBatches(slotId, today);
+        // Đã khóa dòng (PESSIMISTIC_WRITE) và sắp theo hạn dùng; sort lại ở đây để thuật toán không phụ thuộc DB.
+        List<SlotBatchInventory> queue = new ArrayList<>(slotInventory.lockSellableQueue(slotId, today));
+        queue.sort(Comparator
+                .comparing((SlotBatchInventory s) -> s.getBatch().getExpiryDate())
+                .thenComparing(SlotBatchInventory::getId, Comparator.nullsLast(Comparator.naturalOrder())));
+
+        // Bước 1: đủ hàng không?
+        long available = queue.stream().mapToLong(SlotBatchInventory::getQuantity).sum();
+        if (available < quantityToDispense) {
+            throw new InsufficientStockException(slotId, quantityToDispense, available);
+        }
+
+        // Bước 2-3: trừ dần từng lô, thiếu thì sang lô kế tiếp.
+        int remaining = quantityToDispense;
+        List<DispenseResultDTO.BatchDeduction> deductions = new ArrayList<>();
+        for (SlotBatchInventory row : queue) {
+            if (remaining == 0) break;
+            int take = Math.min(remaining, row.getQuantity());
+            FruitBatch batch = row.getBatch();
+
+            row.remove(take);          // tồn của lô trong khay
+            batch.deduct(take);        // tồn còn lại của cả lô
+
+            // Bước 4: ghi lịch sử xuất kho
+            movements.save(new StockMovement(slotId, batch, MovementType.DISPENSE, take));
+            deductions.add(new DispenseResultDTO.BatchDeduction(
+                    batch.getId(), batch.getBatchCode(), batch.getExpiryDate(), take));
+            remaining -= take;
+        }
+        machineSlots.updateStock(slotId, new MachineSlotInventoryRequest(
+                Math.toIntExact(slotInventory.sumQuantityBySlotId(slotId))));
+        return new DispenseResultDTO(slotId, quantityToDispense, quantityToDispense, deductions);
+    }
+
+    /** Nạp một phần lô vào khay (cần để có dữ liệu tồn khay). */
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public SlotInventoryItem loadToSlot(Long slotId, Long batchId, int quantity) {
+        if (quantity < 1) throw new IllegalArgumentException("quantity must be >= 1");
+        slotInventory.lockSlot(slotId);
+        FruitBatch batch = batches.findByIdForUpdate(batchId)
+                .orElseThrow(() -> new ResourceNotFoundException("Batch", batchId));
+        validateLoadBatch(slotId, batch, quantity, LocalDate.now());
+        MachineSlotInventoryResponse machineSlot = machineSlots.getSlot(slotId);
+        validateSlotProduct(machineSlot.productId(), batch);
+        long currentStock = slotInventory.sumQuantityBySlotId(slotId);
+        validateCapacity(machineSlot.capacity(), currentStock, quantity);
+        SlotBatchInventory row = applyRestock(slotId, batch, quantity);
+        // Gửi các thay đổi JPA xuống database trước khi gọi Machine Service, nhưng chưa commit.
+        slotInventory.flush();
+        // Machine Service ghi tồn trong giao dịch riêng. Rollback tại Inventory không hoàn tác được PATCH.
