@@ -55,3 +55,61 @@ public class RabbitConfig {
     // 2. Dead Letter Exchange (DLX)
     @Bean
     public DirectExchange deadLetterExchange() {
+        return new DirectExchange(DLX_NAME);
+    }
+
+    // 3. Dead Letter Queue (DLQ)
+    @Bean
+    public Queue dispenseFailureDlq() {
+        return new Queue(DLQ_NAME, true);
+    }
+
+    // 4. Binding DLQ vào DLX
+    @Bean
+    public Binding dlqBinding(Queue dispenseFailureDlq, DirectExchange deadLetterExchange) {
+        return BindingBuilder.bind(dispenseFailureDlq)
+                .to(deadLetterExchange)
+                .with(DLQ_ROUTING_KEY);
+    }
+
+    // Queue dispense.command.queue (+ binding) do machine-coldchain-service khai báo và tiêu thụ.
+    // Không khai báo lại ở đây để tránh xung đột tham số x-dead-letter-* (PRECONDITION_FAILED).
+
+    @Bean
+    public TopicExchange orderExchange() {
+        return new TopicExchange(EXCHANGE_NAME);
+    }
+
+    @Bean
+    public Queue orderPaidQueue() {
+        return new Queue(QUEUE_NAME, true);
+    }
+
+    @Bean
+    public Binding binding(Queue orderPaidQueue, TopicExchange orderExchange) {
+        return BindingBuilder.bind(orderPaidQueue).to(orderExchange).with(ROUTING_KEY);
+    }
+
+    @Bean
+    public Queue dispenseResultQueue() {
+        return new Queue(DISPENSE_RESULT_QUEUE, true);
+    }
+
+    @Bean
+    public Binding dispenseResultBinding(@Qualifier("dispenseResultQueue") Queue dispenseResultQueue,
+                                         @Qualifier("orderExchange") TopicExchange orderExchange) {
+        return BindingBuilder.bind(dispenseResultQueue).to(orderExchange).with(DISPENSE_RESULT_ROUTING_KEY);
+    }
+
+    @Bean
+    public MessageConverter jsonMessageConverter() {
+        return new Jackson2JsonMessageConverter();
+    }
+
+    @Bean
+    public CommandLineRunner initRabbitTopology(RabbitAdmin rabbitAdmin) {
+        return args -> {
+            rabbitAdmin.initialize();
+        };
+    }
+}
