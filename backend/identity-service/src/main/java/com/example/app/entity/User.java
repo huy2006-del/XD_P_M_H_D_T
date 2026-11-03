@@ -8,6 +8,7 @@ import lombok.experimental.FieldDefaults;
 @Table(name = "users")
 @Data
 @NoArgsConstructor
+@AllArgsConstructor
 @Builder
 @FieldDefaults(level = AccessLevel.PRIVATE)
 public class User {
@@ -20,13 +21,5 @@ public class User {
     String firstName;
     String lastName;
     String email;
-
-    public User(String id, String username, String password, String firstName, String lastName, String email) {
-        this.id = id;
-        this.username = username;
-        this.password = password;
-        this.firstName = firstName;
-        this.lastName = lastName;
-        this.email = email;
-    }
+    String role;
 }
