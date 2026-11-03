@@ -17,7 +17,7 @@ spring:
         - id: machine-websocket
           uri: lb:ws://machine-coldchain-service
           predicates:
-            - Path=/ws/**
+            - Path=/ws/**,/ws-freshvend/**
         - id: inventory-slot-stock
           uri: lb://inventory-service
           predicates:
@@ -25,15 +25,15 @@ spring:
         - id: identity-service
           uri: lb://identity-service
           predicates:
-            - Path=/api/v1/auth/**,/api/v1/users/**
+            - Path=/api/v1/auth/**,/api/v1/users/**,/api/v1/audit-logs/**
         - id: inventory-service
           uri: lb://inventory-service
           predicates:
-            - Path=/api/v1/products/**,/api/v1/batches/**,/uploads/products/**
+            - Path=/api/v1/products/**,/api/v1/batches/**,/uploads/products/**,/api/v1/restock-sessions/**
         - id: machine-coldchain-service
           uri: lb://machine-coldchain-service
           predicates:
-            - Path=/api/v1/machines/**,/api/v1/locations/**,/api/v1/slots/**,/api/v1/simulator/**
+            - Path=/api/v1/machines/**,/api/v1/locations/**,/api/v1/slots/**,/api/v1/simulator/**,/api/v1/alerts/**
 
 eureka:
   client:
