@@ -34,7 +34,7 @@ public record MachineResponse(
                         machine.getLocation().getAddress()
                 ),
                 machine.getLocation().getName(),
-                OperatorResponse.from(machine.getOperator()),
+                OperatorResponse.from(machine.getOperatorId()),
                 machine.getLastPingAt(),
                 machine.getTempMinThreshold(),
                 machine.getTempMaxThreshold(),

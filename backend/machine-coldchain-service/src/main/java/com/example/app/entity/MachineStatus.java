@@ -4,5 +4,6 @@ public enum MachineStatus {
     ONLINE,
     OFFLINE,
     MAINTENANCE,
-    ERROR
+    ERROR,
+    OUT_OF_ORDER
 }
