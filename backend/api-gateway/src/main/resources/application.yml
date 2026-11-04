@@ -17,7 +17,7 @@ spring:
         - id: machine-websocket
           uri: lb:ws://machine-coldchain-service
           predicates:
-            - Path=/ws/**,/ws-freshvend/**
+            - Path=/ws-freshvend/**
         - id: inventory-slot-stock
           uri: lb://inventory-service
           predicates:

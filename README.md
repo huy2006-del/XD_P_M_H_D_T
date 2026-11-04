@@ -92,7 +92,7 @@ folder with `npm ci`. For a production frontend build, run `npm run build`.
 ## Database configuration
 
 The services use separate PostgreSQL databases on `localhost:5433`:
-`freshvend_identity`, `freshvend_inventory`, and `freshvend_machine`. A new
+`freshvend_identity`, `freshvend_inventory`, and `freshvend_machine_db`. A new
 PostgreSQL volume creates them from `database/init/01-create-service-databases.sql`.
 PostgreSQL only runs init scripts for an empty data volume. If you already have
 the FreshVend volume, create any missing databases manually without deleting
@@ -101,7 +101,7 @@ the volume:
 ```powershell
 docker exec freshvend_postgres psql -U freshvend_user -d postgres -c "CREATE DATABASE freshvend_identity;"
 docker exec freshvend_postgres psql -U freshvend_user -d postgres -c "CREATE DATABASE freshvend_inventory;"
-docker exec freshvend_postgres psql -U freshvend_user -d postgres -c "CREATE DATABASE freshvend_machine;"
+docker exec freshvend_postgres psql -U freshvend_user -d postgres -c "CREATE DATABASE freshvend_machine_db;"
 ```
 
 Database URLs, usernames, passwords, ports, and the Eureka URL can be overridden

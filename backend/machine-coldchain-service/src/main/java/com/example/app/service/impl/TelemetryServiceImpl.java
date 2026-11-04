@@ -8,8 +8,10 @@ import com.example.app.exception.BusinessRuleException;
 import com.example.app.exception.ResourceNotFoundException;
 import com.example.app.repository.TemperatureLogRepository;
 import com.example.app.repository.VendingMachineRepository;
+import com.example.app.service.AlertService;
 import com.example.app.service.TelemetryService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,6 +31,8 @@ public class TelemetryServiceImpl implements TelemetryService {
 
     private final VendingMachineRepository vendingMachineRepository;
     private final TemperatureLogRepository temperatureLogRepository;
+    private final AlertService alertService;
+    private final SimpMessagingTemplate messagingTemplate;
 
     @Override
     @Transactional(readOnly = true)
@@ -66,7 +70,10 @@ public class TelemetryServiceImpl implements TelemetryService {
         TemperatureLog log = temperatureLogRepository.save(
                 new TemperatureLog(machine, temperature, humidity, recordedAt)
         );
-        return TemperatureLogResponse.from(log);
+        alertService.evaluateTemperature(machine, temperature, temperature > 12.0);
+        TemperatureLogResponse response = TemperatureLogResponse.from(log);
+        messagingTemplate.convertAndSend("/topic/telemetry/" + machineId, response);
+        return response;
     }
 
     @Override
@@ -78,7 +85,14 @@ public class TelemetryServiceImpl implements TelemetryService {
             double temperature = MIN_TEMPERATURE + ThreadLocalRandom.current().nextDouble(TEMPERATURE_RANGE);
             double humidity = MIN_HUMIDITY + ThreadLocalRandom.current().nextDouble(HUMIDITY_RANGE);
             machine.updateLastPingAt(recordedAt);
-            temperatureLogRepository.save(new TemperatureLog(machine, temperature, humidity, recordedAt));
+            vendingMachineRepository.save(machine);
+            TemperatureLog log = temperatureLogRepository.save(
+                    new TemperatureLog(machine, temperature, humidity, recordedAt));
+            alertService.evaluateTemperature(machine, temperature, false);
+            messagingTemplate.convertAndSend(
+                    "/topic/telemetry/" + machine.getId(),
+                    TemperatureLogResponse.from(log)
+            );
         }
     }
 
