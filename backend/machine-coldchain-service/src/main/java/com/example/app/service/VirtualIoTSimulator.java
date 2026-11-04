@@ -15,6 +15,6 @@ public class VirtualIoTSimulator {
     @Scheduled(fixedRate = 10_000)
     public void generateTelemetry() {
         telemetryService.captureOnlineMachines();
-        log.debug("Đã ghi dữ liệu telemetry cho các máy đang ONLINE.");
+        log.info("📡 [Virtual-IoT Simulator] Đang quét và sinh dữ liệu telemetry định kỳ (10s) cho các máy ONLINE...");
     }
 }

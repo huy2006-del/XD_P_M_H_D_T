@@ -1,0 +1,157 @@
+### ========================================================
+### 1. KIỂM TRA MÁY BÁN HÀNG (MACHINE SERVICE - Port 8083)
+### ========================================================
+
+### 1.1. Lấy danh sách tất cả các máy (Xem máy mẫu Landmark 81 vừa tạo)
+GET http://localhost:8083/api/v1/machines
+Accept: application/json
+
+### 1.2. Xem sơ đồ các khay hàng (Slots: A1, A2, B1) của máy #1
+GET http://localhost:8083/api/v1/machines/1/slots
+Accept: application/json
+
+### 1.3. Xem lịch sử nhiệt độ đang được máy ảo IoT đo ngầm
+GET http://localhost:8083/api/v1/machines/1/telemetry/history?limit=10
+Accept: application/json
+
+### 1.4. Bắn sự cố nhiệt độ nhảy vọt lên 13°C (Kích hoạt cảnh báo đỏ)
+POST http://localhost:8083/api/v1/simulator/machines/1/temperature-spike?temp=13.0
+Accept: application/json
+
+### 1.5. Xem danh sách Cảnh Báo (Kiểm tra xem cảnh báo CRITICAL đã xuất hiện chưa)
+GET http://localhost:8083/api/v1/alerts
+Accept: application/json
+
+### 1.6. Xử lý đóng cảnh báo (Operator Resolve Alert)
+PATCH http://localhost:8083/api/v1/alerts/1/resolve
+Content-Type: application/json
+
+{
+  "resolvedBy": "operator1",
+  "resolutionNote": "Đã đóng kín cửa tủ và khởi động lại lốc làm lạnh, nhiệt độ đã về 4.5°C."
+}
+
+
+### ========================================================
+### 2. TEST XÁC THỰC & NGƯỜI DÙNG (IDENTITY SERVICE - Port 8081)
+### ========================================================
+
+### 2.1. Đăng nhập tài khoản Admin lấy JWT Token thật
+POST http://localhost:8081/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "username": "admin",
+  "password": "admin123"
+}
+
+### 2.2. Đăng nhập tài khoản Operator
+POST http://localhost:8081/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "username": "operator",
+  "password": "operator123"
+}
+
+### 2.3. Lấy danh sách tất cả người dùng trong hệ thống
+GET http://localhost:8081/api/v1/users
+Accept: application/json
+
+### 2.4. Tạo tài khoản người dùng mới (Ví dụ thêm nhân viên restock mới)
+POST http://localhost:8081/api/v1/users
+Content-Type: application/json
+
+{
+  "username": "nhanvien02",
+  "password": "Password@123",
+  "firstName": "Văn A",
+  "lastName": "Nguyễn",
+  "email": "nguyenvana@freshvend.com"
+}
+
+
+### ========================================================
+### 3. TEST QUẢN LÝ KHO & THUẬT TOÁN FIFO (INVENTORY SERVICE - Port 8082)
+### ========================================================
+
+### 3.1. Lấy danh sách sản phẩm trái cây hiện có
+GET http://localhost:8082/api/v1/products
+Accept: application/json
+
+### 3.2. Tạo mới một loại trái cây (Táo Envy New Zealand)
+POST http://localhost:8082/api/v1/products
+Content-Type: application/json
+
+{
+  "name": "Táo Envy New Zealand",
+  "sku": "APPLE-ENVY-01",
+  "price": 25000,
+  "unit": "quả",
+  "imageUrl": "https://freshvend.com/images/apple-envy.png",
+  "shelfLifeDays": 5,
+  "minTempC": 2.0,
+  "maxTempC": 8.0,
+  "description": "Táo Envy giòn ngọt đậm đà, bảo quản lạnh đạt chuẩn ATVSTP"
+}
+
+### 3.3. Nhập Lô Hàng 1 (Hạn sử dụng cận date: 2026-11-06)
+POST http://localhost:8082/api/v1/batches
+Content-Type: application/json
+
+{
+  "productId": 1,
+  "batchCode": "LOT-20261101-01",
+  "supplier": "Nông trại Đà Lạt Farm",
+  "expiryDate": "2026-11-06",
+  "quantityImported": 10,
+  "unitCost": 18000
+}
+
+### 3.4. Nhập Lô Hàng 2 (Hạn sử dụng xa hơn: 2026-11-15)
+POST http://localhost:8082/api/v1/batches
+Content-Type: application/json
+
+{
+  "productId": 1,
+  "batchCode": "LOT-20261101-02",
+  "supplier": "Nông trại Đà Lạt Farm",
+  "expiryDate": "2026-11-15",
+  "quantityImported": 20,
+  "unitCost": 18000
+}
+
+### 3.5. Xem danh sách các Lô hàng (Lọc theo cận date hoặc quá date)
+GET http://localhost:8082/api/v1/batches?productId=1
+Accept: application/json
+
+### 3.6. Nạp Lô 1 (2 quả) và Lô 2 (5 quả) vào khay #1
+POST http://localhost:8082/api/v1/slots/1/batches
+Content-Type: application/json
+
+{
+  "batchId": 1,
+  "quantity": 2
+}
+
+### 3.7. Nạp tiếp Lô 2 vào khay #1
+POST http://localhost:8082/api/v1/slots/1/batches
+Content-Type: application/json
+
+{
+  "batchId": 2,
+  "quantity": 5
+}
+
+### 3.8. Xem tồn kho các lô đang nằm trong khay #1
+GET http://localhost:8082/api/v1/slots/1/inventory
+Accept: application/json
+
+### 3.9. 🌟 TEST THUẬT TOÁN FIFO (Mua 3 quả từ khay #1):
+### Hệ thống PHẢI tự động trừ hết 2 quả của Lô 1 (cận date hơn) và trừ tiếp 1 quả của Lô 2!
+POST http://localhost:8082/api/v1/slots/1/dispense
+Content-Type: application/json
+
+{
+  "quantity": 3
+}
