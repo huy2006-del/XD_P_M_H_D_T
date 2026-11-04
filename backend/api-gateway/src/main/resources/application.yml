@@ -25,11 +25,11 @@ spring:
         - id: identity-service
           uri: lb://identity-service
           predicates:
-            - Path=/api/v1/auth/**,/api/v1/users/**
+            - Path=/api/v1/auth/**,/api/v1/users/**,/api/v1/audit-logs/**
         - id: inventory-service
           uri: lb://inventory-service
           predicates:
-            - Path=/api/v1/products/**,/api/v1/batches/**,/uploads/products/**
+            - Path=/api/v1/products/**,/api/v1/batches/**,/uploads/products/**,/api/v1/restock-sessions/**
         - id: machine-coldchain-service
           uri: lb://machine-coldchain-service
           predicates:
