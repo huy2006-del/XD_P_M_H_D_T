@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from "react";
 import {
   NavLink,
@@ -19,6 +18,7 @@ import {
 
 import Breadcrumb from "../shared/components/Breadcrumb";
 import { useAuthStore } from "../features/auth/authStore";
+import { NotificationBell } from "../features/notifications/NotificationBell";
 import "./managementLayout.css";
 
 const menuItems = [
@@ -153,7 +153,10 @@ export default function AdminLayout() {
             </span>
           </div>
 
-          <div className="fv-user-info">
+          <div className="fv-user-info" style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+            {/* Quả chuông cảnh báo (Task 1.2) */}
+            <NotificationBell />
+
             <span className="fv-user-avatar">
               {user?.username?.charAt(0).toUpperCase() ?? "A"}
             </span>
