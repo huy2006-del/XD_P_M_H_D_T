@@ -9,7 +9,9 @@ are managed by `backend/pom.xml`.
 
 ## Run the whole project (Windows PowerShell)
 
-Install Java 17+, Maven, Node.js/npm, and start Docker Desktop. Open separate
+Install Java 25+, Node.js/npm, and start Docker Desktop. Maven is provided by
+the project wrapper (`backend/mvnw.cmd`), so a global Maven installation is
+not needed. Open separate
 PowerShell terminals at the repository root (`C:\XD_P_M_H_D_T`).
 
 **Terminal 1 — PostgreSQL:**
@@ -22,29 +24,29 @@ docker compose up -d postgres
 
 ```powershell
 Set-Location backend
-mvn -pl discovery-server spring-boot:run
+.\mvnw.cmd -pl discovery-server spring-boot:run
 ```
 
 In four more terminals, run:
 
 ```powershell
 Set-Location backend
-mvn -pl identity-service spring-boot:run
+.\mvnw.cmd -pl identity-service spring-boot:run
 ```
 
 ```powershell
 Set-Location backend
-mvn -pl inventory-service spring-boot:run
+.\mvnw.cmd -pl inventory-service spring-boot:run
 ```
 
 ```powershell
 Set-Location backend
-mvn -pl machine-coldchain-service spring-boot:run
+.\mvnw.cmd -pl machine-coldchain-service spring-boot:run
 ```
 
 ```powershell
 Set-Location backend
-mvn -pl api-gateway spring-boot:run
+.\mvnw.cmd -pl api-gateway spring-boot:run
 ```
 
 The API Gateway listens on `http://localhost:8080`; Eureka is at
@@ -149,7 +151,7 @@ optional `model`, `locationId`, and `operatorId`. New machines start as
 
 ```powershell
 Set-Location backend
-mvn clean install
+.\mvnw.cmd clean install
 ```
 
 ## Package layout

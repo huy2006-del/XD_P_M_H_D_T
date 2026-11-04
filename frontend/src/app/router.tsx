@@ -9,10 +9,11 @@ import RequireRole from "./guards/RequireRole";
 
 import LoginPage from "../features/auth/LoginPage";
 import { ProductListPage } from "../features/products/pages/ProductListPage";
+import { RestockWizardPage } from "../features/restock/pages/RestockWizardPage";
 import { ROUTES } from "../shared/constants/routes";
 import KioskSimulator from "../features/kiosk/KioskSimulator";
 import MachineSlotsPage from "../features/slots/pages/MachineSlotsPage";
-
+import { Link } from "react-router-dom";
 // FE3 - Fleet Dashboard
 const FleetDashboard = lazy(
   () => import("../features/fleet/pages/FleetDashboard.jsx")
@@ -98,7 +99,21 @@ export const router = createBrowserRouter([
               },
               {
                 path: "dashboard",
-                element: <div>Operator Dashboard</div>,
+                element: (
+                  <div className="space-y-4">
+                    <h1 className="text-xl font-semibold">Operator Dashboard</h1>
+                    <Link
+                      to="/operator/restock"
+                      className="inline-flex rounded-lg bg-green-700 px-4 py-2 font-semibold text-white hover:bg-green-800"
+                    >
+                      Bắt đầu nạp hàng
+                    </Link>
+                  </div>
+                ),
+              },
+              {
+                path: "restock",
+                element: <RestockWizardPage />,
               },
             ],
           },
