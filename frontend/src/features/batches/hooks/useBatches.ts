@@ -1,8 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
-import axios from 'axios'; // Hoặc dùng apiClient của bạn
+import axios from 'axios';
+import axiosInstance from '../../../shared/api/axiosInstance';
+import type { PaginatedResponse } from '../../../shared/types/common.types';
 import type { FruitBatch, CreateBatchRequest } from '../types';
 
-const API_URL = '/api/v1/batches'; // Thay bằng base URL thực tế của bạn
+const API_URL = '/api/v1/batches';
 
 export const useBatches = () => {
   const [batches, setBatches] = useState<FruitBatch[]>([]);
@@ -12,11 +14,18 @@ export const useBatches = () => {
   const fetchBatches = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await axios.get(API_URL);
-      setBatches(response.data);
+      const response = await axiosInstance.get<PaginatedResponse<FruitBatch>>(
+        API_URL
+      );
+      setBatches(response.data.content);
       setError(null);
-    } catch (err: any) {
-      setError(err.message || 'Lỗi khi tải danh sách lô hàng');
+    } catch (err: unknown) {
+      const message = axios.isAxiosError<{ message?: string }>(err)
+        ? err.response?.data?.message ?? err.message
+        : err instanceof Error
+          ? err.message
+          : 'Lỗi khi tải danh sách lô hàng';
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -24,10 +33,15 @@ export const useBatches = () => {
 
   const createBatch = async (data: CreateBatchRequest) => {
     try {
-      await axios.post(API_URL, data);
+      await axiosInstance.post(API_URL, data);
       await fetchBatches(); // Refresh lại danh sách sau khi thêm
-    } catch (err: any) {
-      throw new Error(err.response?.data?.message || 'Lỗi khi tạo lô hàng mới');
+    } catch (err: unknown) {
+      const message = axios.isAxiosError<{ message?: string }>(err)
+        ? err.response?.data?.message ?? err.message
+        : err instanceof Error
+          ? err.message
+          : 'Lỗi khi tạo lô hàng mới';
+      throw new Error(message, { cause: err });
     }
   };
 

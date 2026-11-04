@@ -1,5 +1,6 @@
+
 import { lazy, Suspense } from "react";
-import { createBrowserRouter, Navigate } from "react-router-dom";
+import { createBrowserRouter, Navigate, Link } from "react-router-dom";
 
 import AdminLayout from "../layouts/adminLayout";
 import OperatorLayout from "../layouts/operatorLayout";
@@ -9,9 +10,11 @@ import RequireRole from "./guards/RequireRole";
 
 import LoginPage from "../features/auth/LoginPage";
 import { ProductListPage } from "../features/products/pages/ProductListPage";
+import { RestockWizardPage } from "../features/restock/pages/RestockWizardPage";
 import { ROUTES } from "../shared/constants/routes";
 import KioskSimulator from "../features/kiosk/KioskSimulator";
 import MachineSlotsPage from "../features/slots/pages/MachineSlotsPage";
+import { ColdChainMonitorPage } from "../features/coldchain/ColdChainMonitorPage";
 
 // FE3 - Fleet Dashboard
 const FleetDashboard = lazy(
@@ -68,9 +71,7 @@ export const router = createBrowserRouter([
               {
                 path: "machines",
                 element: (
-                  <Suspense
-                    fallback={<div>Đang tải danh sách máy...</div>}
-                  >
+                  <Suspense fallback={<div>Đang tải danh sách máy...</div>}>
                     <FleetDashboard />
                   </Suspense>
                 ),
@@ -78,6 +79,10 @@ export const router = createBrowserRouter([
               {
                 path: "machines/:machineId/slots",
                 element: <MachineSlotsPage />,
+              },
+              {
+                path: "machines/:id/coldchain",
+                element: <ColdChainMonitorPage />,
               },
             ],
           },
@@ -98,7 +103,23 @@ export const router = createBrowserRouter([
               },
               {
                 path: "dashboard",
-                element: <div>Operator Dashboard</div>,
+                element: (
+                  <div className="space-y-4">
+                    <h1 className="text-xl font-semibold">
+                      Operator Dashboard
+                    </h1>
+                    <Link
+                      to="/operator/restock"
+                      className="inline-flex rounded-lg bg-green-700 px-4 py-2 font-semibold text-white hover:bg-green-800"
+                    >
+                      Bắt đầu nạp hàng
+                    </Link>
+                  </div>
+                ),
+              },
+              {
+                path: "restock",
+                element: <RestockWizardPage />,
               },
             ],
           },

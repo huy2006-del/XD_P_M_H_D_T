@@ -9,7 +9,7 @@ export const ExpiryBadge: React.FC<Props> = ({ expiryDate }) => {
   const daysLeft = getDaysUntilExpiry(expiryDate);
 
   let colorClass = 'bg-green-100 text-green-800'; // An toàn
-  let text = 'An toàn';
+  let text = `Còn ${daysLeft} ngày`;
 
   if (daysLeft < 0) {
     colorClass = 'bg-red-100 text-red-800'; // Đã hết hạn
@@ -17,8 +17,6 @@ export const ExpiryBadge: React.FC<Props> = ({ expiryDate }) => {
   } else if (daysLeft <= 2) {
     colorClass = 'bg-orange-100 text-orange-800'; // Sắp hết hạn (dưới 48h)
     text = `Sắp hết hạn (${daysLeft} ngày)`;
-  } else {
-    text = `Còn ${daysLeft} ngày`;
   }
 
   return (

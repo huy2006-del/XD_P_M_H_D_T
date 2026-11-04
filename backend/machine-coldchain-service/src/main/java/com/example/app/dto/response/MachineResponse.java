@@ -1,6 +1,5 @@
 package com.example.app.dto.response;
 
-import com.example.app.dto.response.OperatorResponse;
 import com.example.app.entity.VendingMachine;
 import com.fasterxml.jackson.annotation.JsonInclude;
 

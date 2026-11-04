@@ -32,8 +32,8 @@ export default function KioskSimulator() {
       // Giả lập latency API Backend (GET /api/vending-machines/{machineId}/slots)
       await new Promise((res) => setTimeout(res, 350));
       setSlots(MOCK_INVENTORY_DATA[machineId] || []);
-    } catch (err) {
-      console.error('Lỗi khi tải danh sách khay:', err);
+    } catch (error: unknown) {
+      console.error('Lỗi khi tải danh sách khay:', error);
     } finally {
       setLoading(false);
     }
@@ -88,7 +88,7 @@ export default function KioskSimulator() {
       setFeedbackMessage(
         `Đã xuất hàng thành công tại khay ${activeSlot.slotCode}! Hệ thống đã ưu tiên trừ lô hàng theo thuật toán FIFO (${activeSlot.batchInfo}).`
       );
-    } catch (err) {
+    } catch {
       setTxStatus('ERROR');
       setFeedbackMessage('Lỗi giao dịch hoặc khay đã hết hàng trong kho. Vui lòng chọn sản phẩm khác!');
     } finally {
@@ -273,4 +273,3 @@ export default function KioskSimulator() {
     </div>
   );
 }
-

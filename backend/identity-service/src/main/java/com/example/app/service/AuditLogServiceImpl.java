@@ -4,7 +4,6 @@ import com.example.app.dto.AuditLogRequest;
 import com.example.app.dto.AuditLogResponse;
 import com.example.app.entity.AuditLog;
 import com.example.app.repository.AuditLogRepository;
-import com.example.app.service.AuditLogService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
