@@ -9,9 +9,7 @@ are managed by `backend/pom.xml`.
 
 ## Run the whole project (Windows PowerShell)
 
-Install Java 25+, Node.js/npm, and start Docker Desktop. Maven is provided by
-the project wrapper (`backend/mvnw.cmd`), so a global Maven installation is
-not needed. Open separate
+Install Java 17+, Maven, Node.js/npm, and start Docker Desktop. Open separate
 PowerShell terminals at the repository root (`C:\XD_P_M_H_D_T`).
 
 **Terminal 1 — PostgreSQL:**
@@ -24,29 +22,29 @@ docker compose up -d postgres
 
 ```powershell
 Set-Location backend
-.\mvnw.cmd -pl discovery-server spring-boot:run
+mvn -pl discovery-server spring-boot:run
 ```
 
 In four more terminals, run:
 
 ```powershell
 Set-Location backend
-.\mvnw.cmd -pl identity-service spring-boot:run
+mvn -pl identity-service spring-boot:run
 ```
 
 ```powershell
 Set-Location backend
-.\mvnw.cmd -pl inventory-service spring-boot:run
+mvn -pl inventory-service spring-boot:run
 ```
 
 ```powershell
 Set-Location backend
-.\mvnw.cmd -pl machine-coldchain-service spring-boot:run
+mvn -pl machine-coldchain-service spring-boot:run
 ```
 
 ```powershell
 Set-Location backend
-.\mvnw.cmd -pl api-gateway spring-boot:run
+mvn -pl api-gateway spring-boot:run
 ```
 
 The API Gateway listens on `http://localhost:8080`; Eureka is at
@@ -63,17 +61,18 @@ Set-Location frontend
 npm ci
 ```
 
-Then start the frontend:
+Then start the frontend. By default it uses the real API through the gateway at
+`http://localhost:8080`; make sure `identity-service` is running and registered
+with Eureka before signing in. On first startup, it seeds `admin` / `admin123`
+and `operator` / `operator123`.
 
 ```powershell
-$env:VITE_USE_MOCK_AUTH = "true"
 npm run dev
 ```
 
 Open the Vite URL printed in the terminal (normally `http://localhost:5173`).
-The backend does not yet implement authentication, so enable mock login for
-frontend development. Sign in with `admin` / `admin123` or `operator` /
-`operator123`.
+For frontend-only development without the backend, set
+`$env:VITE_USE_MOCK_AUTH = "true"` before starting Vite to use mock login.
 Directly access the Kiosk routing: http://localhost:5173/kiosk-simulator
 
 Stop each running server with `Ctrl+C`. Stop PostgreSQL from the repository root:
@@ -151,7 +150,7 @@ optional `model`, `locationId`, and `operatorId`. New machines start as
 
 ```powershell
 Set-Location backend
-.\mvnw.cmd clean install
+mvn clean install
 ```
 
 ## Package layout
