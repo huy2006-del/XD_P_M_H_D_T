@@ -1,6 +1,5 @@
-
 import { lazy, Suspense } from "react";
-import { createBrowserRouter, Navigate, Link } from "react-router-dom";
+import { createBrowserRouter, Navigate } from "react-router-dom";
 
 import AdminLayout from "../layouts/adminLayout";
 import OperatorLayout from "../layouts/operatorLayout";
@@ -10,11 +9,11 @@ import RequireRole from "./guards/RequireRole";
 
 import LoginPage from "../features/auth/LoginPage";
 import { ProductListPage } from "../features/products/pages/ProductListPage";
-import { RestockWizardPage } from "../features/restock/pages/RestockWizardPage";
 import { ROUTES } from "../shared/constants/routes";
 import KioskSimulator from "../features/kiosk/KioskSimulator";
 import MachineSlotsPage from "../features/slots/pages/MachineSlotsPage";
 import { ColdChainMonitorPage } from "../features/coldchain/ColdChainMonitorPage";
+import { OrderManagementPage } from "../features/orders/pages/OrderManagementPage";
 
 // FE3 - Fleet Dashboard
 const FleetDashboard = lazy(
@@ -43,8 +42,6 @@ export const router = createBrowserRouter([
       </div>
     ),
   },
-
-  // Các route yêu cầu đăng nhập
   {
     element: <ProtectedRoute />,
     children: [
@@ -63,6 +60,10 @@ export const router = createBrowserRouter([
               {
                 path: "dashboard",
                 element: <div>Admin Dashboard</div>,
+              },
+              {
+                path: "orders",
+                element: <OrderManagementPage />,
               },
               {
                 path: "products",
@@ -88,7 +89,6 @@ export const router = createBrowserRouter([
           },
         ],
       },
-
       // OPERATOR
       {
         element: <RequireRole allowedRoles={["OPERATOR"]} />,
@@ -103,23 +103,7 @@ export const router = createBrowserRouter([
               },
               {
                 path: "dashboard",
-                element: (
-                  <div className="space-y-4">
-                    <h1 className="text-xl font-semibold">
-                      Operator Dashboard
-                    </h1>
-                    <Link
-                      to="/operator/restock"
-                      className="inline-flex rounded-lg bg-green-700 px-4 py-2 font-semibold text-white hover:bg-green-800"
-                    >
-                      Bắt đầu nạp hàng
-                    </Link>
-                  </div>
-                ),
-              },
-              {
-                path: "restock",
-                element: <RestockWizardPage />,
+                element: <div>Operator Dashboard</div>,
               },
             ],
           },
@@ -127,7 +111,6 @@ export const router = createBrowserRouter([
       },
     ],
   },
-
   {
     path: "*",
     element: (

@@ -14,6 +14,7 @@ import {
   LogOut,
   Menu,
   X,
+  ShoppingCart
 } from "lucide-react";
 
 import Breadcrumb from "../shared/components/Breadcrumb";
@@ -26,6 +27,11 @@ const menuItems = [
     label: "Dashboard",
     path: "/admin/dashboard",
     icon: LayoutDashboard,
+  },
+  {
+    label: "Orders",
+    path: "/admin/orders",
+    icon: ShoppingCart,
   },
   {
     label: "Products",
@@ -154,17 +160,13 @@ export default function AdminLayout() {
           </div>
 
           <div className="fv-user-info" style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-            {/* Quả chuông cảnh báo (Task 1.2) */}
             <NotificationBell />
-
             <span className="fv-user-avatar">
               {user?.username?.charAt(0).toUpperCase() ?? "A"}
             </span>
-
             <span className="fv-user-name">
               {user?.username ?? "Admin"}
             </span>
-
             <span className="fv-role-badge">
               {user?.role ?? "ADMIN"}
             </span>
@@ -173,7 +175,6 @@ export default function AdminLayout() {
 
         <main className="fv-content">
           <Breadcrumb />
-
           <div className="fv-page-content">
             <Outlet />
           </div>
