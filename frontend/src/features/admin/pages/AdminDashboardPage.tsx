@@ -4,7 +4,7 @@ import {
   PieChart, Pie, Cell, Legend 
 } from 'recharts';
 import toast, { Toaster } from 'react-hot-toast';
-// SỬA LỖI 1: Thêm từ khóa 'type' trước DashboardData để tuân thủ verbatimModuleSyntax
+
 import { adminDashboardService, type DashboardData } from '../services/adminDashboardService';
 
 // Bảng màu cho Biểu đồ Tròn
@@ -24,7 +24,7 @@ export const AdminDashboardPage: React.FC = () => {
         const result = await adminDashboardService.getDashboardData();
         if (isMounted) setData(result);
       } catch {
-        // SỬA LỖI 2: Dùng 'catch' thay vì 'catch (error)' vì không sử dụng biến error
+
         toast.error("Không thể tải dữ liệu Dashboard!");
       } finally {
         if (isMounted) setLoading(false);
@@ -45,7 +45,7 @@ export const AdminDashboardPage: React.FC = () => {
       
       toast.success("Tải báo cáo doanh thu thành công!", { id: 'export-toast' });
     } catch {
-      // SỬA LỖI 2: Dùng 'catch' thay vì 'catch (error)'
+
       toast.error("Lỗi khi tải báo cáo!", { id: 'export-toast' });
     } finally {
       setIsExporting(false);
@@ -114,7 +114,7 @@ export const AdminDashboardPage: React.FC = () => {
                 />
                 <RechartsTooltip 
                   cursor={{ fill: '#F3F4F6' }}
-                  // SỬA LỖI 3: Không ép cứng (value: number), tự suy luận và xử lý an toàn
+
                   formatter={(value) => {
                     const numericValue = typeof value === 'number' ? value : Number(value) || 0;
                     return [`${numericValue.toLocaleString('vi-VN')} VNĐ`, 'Doanh thu'];
@@ -146,7 +146,7 @@ export const AdminDashboardPage: React.FC = () => {
                     <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
                   ))}
                 </Pie>
-                {/* SỬA LỖI 3: Xử lý tương tự cho PieChart */}
+
                 <RechartsTooltip 
                   formatter={(value) => {
                     const numericValue = typeof value === 'number' ? value : Number(value) || 0;
