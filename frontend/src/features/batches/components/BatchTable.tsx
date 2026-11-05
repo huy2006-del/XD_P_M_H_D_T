@@ -25,17 +25,17 @@ export const BatchTable: React.FC<Props> = ({ batches }) => {
         <tbody>
           {batches.map((batch) => (
             <tr key={batch.id} className="border-b hover:bg-gray-50">
-              <td className="p-4 font-medium">{batch.batch_code}</td>
-              <td className="p-4">{batch.productName || `SP #${batch.product_id}`}</td>
+              <td className="p-4 font-medium">{batch.batchCode}</td>
+              <td className="p-4">{batch.productName || `SP #${batch.productId}`}</td>
               <td className="p-4">{batch.supplier}</td>
-              <td className="p-4">{formatDate(batch.import_date)}</td>
-              <td className="p-4">{formatDate(batch.expiry_date)}</td>
+              <td className="p-4">{formatDate(batch.importDate)}</td>
+              <td className="p-4">{formatDate(batch.expiryDate)}</td>
               <td className="p-4">
-                <span className="font-semibold">{batch.quantity_remaining}</span> 
-                <span className="text-gray-400"> / {batch.quantity_imported}</span>
+                <span className="font-semibold">{batch.quantityRemaining}</span>
+                <span className="text-gray-400"> / {batch.quantityImported}</span>
               </td>
               <td className="p-4">
-                <ExpiryBadge expiryDate={batch.expiry_date} />
+                <ExpiryBadge expiryDate={batch.expiryDate} />
               </td>
             </tr>
           ))}

@@ -1,14 +1,26 @@
+import axios from 'axios';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { productsApi } from '../api/products.api';
+import type { PaginatedResponse } from '@/shared/types/common.types';
 import type {
+  Product,
   ProductListQuery,
   ProductUpsertPayload,
 } from '../types/product.types';
 
+function getErrorMessage(error: unknown, fallback: string): string {
+  if (axios.isAxiosError<{ message?: string }>(error)) {
+    return error.response?.data?.message ?? error.message ?? fallback;
+  }
+
+  return error instanceof Error ? error.message : fallback;
+}
+
 export const productKeys = {
   all: ['products'] as const,
-  list: (q: ProductListQuery) => [...productKeys.all, 'list', q] as const,
+  lists: () => [...productKeys.all, 'list'] as const,
+  list: (q: ProductListQuery) => [...productKeys.lists(), q] as const,
   detail: (id: string) => [...productKeys.all, 'detail', id] as const,
 };
 
@@ -35,8 +47,8 @@ export const useCreateProduct = () => {
       toast.success('Đã tạo sản phẩm mới');
       qc.invalidateQueries({ queryKey: productKeys.all });
     },
-    onError: (err: any) => {
-      toast.error(err?.response?.data?.message ?? 'Tạo sản phẩm thất bại');
+    onError: (error: unknown) => {
+      toast.error(getErrorMessage(error, 'Tạo sản phẩm thất bại'));
     },
   });
 };
@@ -50,8 +62,8 @@ export const useUpdateProduct = () => {
       toast.success('Đã cập nhật sản phẩm');
       qc.invalidateQueries({ queryKey: productKeys.all });
     },
-    onError: (err: any) => {
-      toast.error(err?.response?.data?.message ?? 'Cập nhật thất bại');
+    onError: (error: unknown) => {
+      toast.error(getErrorMessage(error, 'Cập nhật thất bại'));
     },
   });
 };
@@ -64,15 +76,16 @@ export const useToggleProductStatus = () => {
     // Optimistic update
     onMutate: async ({ id, isActive }) => {
       await qc.cancelQueries({ queryKey: productKeys.all });
-      const previous = qc.getQueriesData({ queryKey: productKeys.all });
+      const previous = qc.getQueriesData<PaginatedResponse<Product>>({
+        queryKey: productKeys.lists(),
+      });
       previous.forEach(([key, data]) => {
         if (!data) return;
-        const anyData = data as any;
-        if (Array.isArray(anyData?.content)) {
+        if (Array.isArray(data.content)) {
           qc.setQueryData(key, {
-            ...anyData,
-            content: anyData.content.map((p: any) =>
-              p.id === id ? { ...p, isActive } : p
+            ...data,
+            content: data.content.map((product) =>
+              product.id === id ? { ...product, isActive } : product
             ),
           });
         }
@@ -95,8 +108,8 @@ export const useDeleteProduct = () => {
       toast.success('Đã xóa sản phẩm');
       qc.invalidateQueries({ queryKey: productKeys.all });
     },
-    onError: (err: any) => {
-      toast.error(err?.response?.data?.message ?? 'Xóa sản phẩm thất bại');
+    onError: (error: unknown) => {
+      toast.error(getErrorMessage(error, 'Xóa sản phẩm thất bại'));
     },
   });
 };

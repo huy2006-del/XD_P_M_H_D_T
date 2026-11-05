@@ -61,17 +61,18 @@ Set-Location frontend
 npm ci
 ```
 
-Then start the frontend:
+Then start the frontend. By default it uses the real API through the gateway at
+`http://localhost:8080`; make sure `identity-service` is running and registered
+with Eureka before signing in. On first startup, it seeds `admin` / `admin123`
+and `operator` / `operator123`.
 
 ```powershell
-$env:VITE_USE_MOCK_AUTH = "true"
 npm run dev
 ```
 
 Open the Vite URL printed in the terminal (normally `http://localhost:5173`).
-The backend does not yet implement authentication, so enable mock login for
-frontend development. Sign in with `admin` / `admin123` or `operator` /
-`operator123`.
+For frontend-only development without the backend, set
+`$env:VITE_USE_MOCK_AUTH = "true"` before starting Vite to use mock login.
 Directly access the Kiosk routing: http://localhost:5173/kiosk-simulator
 
 Stop each running server with `Ctrl+C`. Stop PostgreSQL from the repository root:
@@ -92,7 +93,7 @@ folder with `npm ci`. For a production frontend build, run `npm run build`.
 ## Database configuration
 
 The services use separate PostgreSQL databases on `localhost:5433`:
-`freshvend_identity`, `freshvend_inventory`, and `freshvend_machine`. A new
+`freshvend_identity`, `freshvend_inventory`, and `freshvend_machine_db`. A new
 PostgreSQL volume creates them from `database/init/01-create-service-databases.sql`.
 PostgreSQL only runs init scripts for an empty data volume. If you already have
 the FreshVend volume, create any missing databases manually without deleting
@@ -101,7 +102,7 @@ the volume:
 ```powershell
 docker exec freshvend_postgres psql -U freshvend_user -d postgres -c "CREATE DATABASE freshvend_identity;"
 docker exec freshvend_postgres psql -U freshvend_user -d postgres -c "CREATE DATABASE freshvend_inventory;"
-docker exec freshvend_postgres psql -U freshvend_user -d postgres -c "CREATE DATABASE freshvend_machine;"
+docker exec freshvend_postgres psql -U freshvend_user -d postgres -c "CREATE DATABASE freshvend_machine_db;"
 ```
 
 Database URLs, usernames, passwords, ports, and the Eureka URL can be overridden

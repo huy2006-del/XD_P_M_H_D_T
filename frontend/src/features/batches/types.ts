@@ -1,14 +1,16 @@
 export interface FruitBatch {
   id: number;
-  product_id: number;
-  batch_code: string;
+  productId: number;
+  productName: string;
+  batchCode: string;
   supplier: string;
-  import_date: string;
-  expiry_date: string;
-  quantity_imported: number;
-  quantity_remaining: number;
-  unit_cost: number;
-  productName?: string; // Optional nếu Backend join sẵn
+  importDate: string;
+  expiryDate: string;
+  quantityImported: number;
+  quantityRemaining: number;
+  unitCost: number;
+  expired: boolean;
+  daysToExpiry: number;
 }
 
 export interface CreateBatchRequest {

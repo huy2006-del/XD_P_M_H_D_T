@@ -12,6 +12,8 @@ import { ProductListPage } from "../features/products/pages/ProductListPage";
 import { ROUTES } from "../shared/constants/routes";
 import KioskSimulator from "../features/kiosk/KioskSimulator";
 import MachineSlotsPage from "../features/slots/pages/MachineSlotsPage";
+import { ColdChainMonitorPage } from "../features/coldchain/ColdChainMonitorPage";
+import { OrderManagementPage } from "../features/orders/pages/OrderManagementPage";
 
 // FE3 - Fleet Dashboard
 const FleetDashboard = lazy(
@@ -40,8 +42,6 @@ export const router = createBrowserRouter([
       </div>
     ),
   },
-
-  // Các route yêu cầu đăng nhập
   {
     element: <ProtectedRoute />,
     children: [
@@ -62,15 +62,17 @@ export const router = createBrowserRouter([
                 element: <div>Admin Dashboard</div>,
               },
               {
+                path: "orders",
+                element: <OrderManagementPage />,
+              },
+              {
                 path: "products",
                 element: <ProductListPage />,
               },
               {
                 path: "machines",
                 element: (
-                  <Suspense
-                    fallback={<div>Đang tải danh sách máy...</div>}
-                  >
+                  <Suspense fallback={<div>Đang tải danh sách máy...</div>}>
                     <FleetDashboard />
                   </Suspense>
                 ),
@@ -79,11 +81,14 @@ export const router = createBrowserRouter([
                 path: "machines/:machineId/slots",
                 element: <MachineSlotsPage />,
               },
+              {
+                path: "machines/:id/coldchain",
+                element: <ColdChainMonitorPage />,
+              },
             ],
           },
         ],
       },
-
       // OPERATOR
       {
         element: <RequireRole allowedRoles={["OPERATOR"]} />,
@@ -106,7 +111,6 @@ export const router = createBrowserRouter([
       },
     ],
   },
-
   {
     path: "*",
     element: (

@@ -36,8 +36,10 @@ export const CreateBatchModal: React.FC<Props> = ({ isOpen, onClose, onSubmit })
       onClose();
       // Reset form
       setFormData({ productId: 0, batchCode: '', supplier: '', expiryDate: '', quantityImported: 0, unitCost: 0 });
-    } catch (error: any) {
-      setErrorMsg(error.message);
+    } catch (error: unknown) {
+      setErrorMsg(
+        error instanceof Error ? error.message : 'Không thể tạo lô hàng.'
+      );
     }
   };
 

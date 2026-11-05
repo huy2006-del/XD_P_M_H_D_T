@@ -4,13 +4,11 @@ import com.example.app.dto.request.MachineRequest;
 import com.example.app.dto.response.MachineResponse;
 import com.example.app.entity.Location;
 import com.example.app.entity.MachineStatus;
-import com.example.app.entity.Operator;
 import com.example.app.entity.VendingMachine;
 import com.example.app.exception.DuplicateSerialNumberException;
 import com.example.app.exception.BusinessRuleException;
 import com.example.app.exception.ResourceNotFoundException;
 import com.example.app.repository.LocationRepository;
-import com.example.app.repository.OperatorRepository;
 import com.example.app.repository.TemperatureLogRepository;
 import com.example.app.repository.VendingMachineRepository;
 import com.example.app.service.VendingMachineService;
@@ -27,7 +25,6 @@ public class VendingMachineServiceImpl implements VendingMachineService {
 
     private final VendingMachineRepository machineRepository;
     private final LocationRepository locationRepository;
-    private final OperatorRepository operatorRepository;
     private final TemperatureLogRepository temperatureLogRepository;
 
     @Override
@@ -59,14 +56,13 @@ public class VendingMachineServiceImpl implements VendingMachineService {
             throw new DuplicateSerialNumberException(request.serialNumber());
         }
         Location location = findLocation(request.locationId());
-        Operator operator = findOperator(request.operatorId());
         validateThresholds(request.tempMinThreshold(), request.tempMaxThreshold());
         VendingMachine machine = new VendingMachine(
                 request.serialNumber(),
                 request.name(),
                 request.model(),
                 location,
-                operator,
+                request.operatorId(),
                 thresholdOrDefault(request.tempMinThreshold(), new BigDecimal("2.00")),
                 thresholdOrDefault(request.tempMaxThreshold(), new BigDecimal("8.00"))
         );
@@ -92,7 +88,7 @@ public class VendingMachineServiceImpl implements VendingMachineService {
                 request.name(),
                 request.model(),
                 findLocation(request.locationId()),
-                findOperator(request.operatorId()),
+                request.operatorId(),
                 minThreshold,
                 maxThreshold
         );
@@ -135,8 +131,4 @@ public class VendingMachineServiceImpl implements VendingMachineService {
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy địa điểm có id: " + id));
     }
 
-    private Operator findOperator(Long id) {
-        return operatorRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy nhân viên có id: " + id));
-    }
 }

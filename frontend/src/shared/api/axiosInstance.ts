@@ -1,6 +1,6 @@
-
 import axios, { AxiosError } from "axios";
 import { useAuthStore } from "../../features/auth/authStore";
+import { toast } from "sonner"; // Thêm thư viện hiển thị thông báo
 
 // Ưu tiên cấu hình API của FE2, hỗ trợ cả biến môi trường FE1
 const BASE_URL =
@@ -42,16 +42,31 @@ axiosInstance.interceptors.request.use(
 );
 
 // RESPONSE INTERCEPTOR
-// Nếu Backend trả 401: xóa trạng thái đăng nhập và về /login
+// Nâng cấp: Tự động xử lý lỗi 401 và hiển thị Toast cho các lỗi khác
 axiosInstance.interceptors.response.use(
   (response) => response,
-  (error: AxiosError) => {
+  (error: AxiosError<any>) => {
+    // 1. Xử lý mất phiên đăng nhập (401)
     if (error.response?.status === 401) {
       useAuthStore.getState().logout();
 
       if (window.location.pathname !== "/login") {
+        toast.error("Phiên đăng nhập hết hạn, vui lòng đăng nhập lại.");
         window.location.replace("/login");
       }
+      
+      return Promise.reject(error);
+    }
+
+    // 2. Tự động Toast các lỗi khác (400, 403, 500...) từ Backend
+    const errorMessage =
+      error.response?.data?.message ||
+      error.message ||
+      "Lỗi kết nối đến máy chủ. Vui lòng thử lại!";
+
+    // Chỉ hiện toast nếu không phải ở màn hình Kiosk (để không làm phiền khách mua hàng)
+    if (!window.location.pathname.includes('/kiosk')) {
+      toast.error(errorMessage);
     }
 
     return Promise.reject(error);

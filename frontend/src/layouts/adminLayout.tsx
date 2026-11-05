@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from "react";
 import {
   NavLink,
@@ -15,10 +14,12 @@ import {
   LogOut,
   Menu,
   X,
+  ShoppingCart
 } from "lucide-react";
 
 import Breadcrumb from "../shared/components/Breadcrumb";
 import { useAuthStore } from "../features/auth/authStore";
+import { NotificationBell } from "../features/notifications/NotificationBell";
 import "./managementLayout.css";
 
 const menuItems = [
@@ -26,6 +27,11 @@ const menuItems = [
     label: "Dashboard",
     path: "/admin/dashboard",
     icon: LayoutDashboard,
+  },
+  {
+    label: "Orders",
+    path: "/admin/orders",
+    icon: ShoppingCart,
   },
   {
     label: "Products",
@@ -153,15 +159,14 @@ export default function AdminLayout() {
             </span>
           </div>
 
-          <div className="fv-user-info">
+          <div className="fv-user-info" style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+            <NotificationBell />
             <span className="fv-user-avatar">
               {user?.username?.charAt(0).toUpperCase() ?? "A"}
             </span>
-
             <span className="fv-user-name">
               {user?.username ?? "Admin"}
             </span>
-
             <span className="fv-role-badge">
               {user?.role ?? "ADMIN"}
             </span>
@@ -170,7 +175,6 @@ export default function AdminLayout() {
 
         <main className="fv-content">
           <Breadcrumb />
-
           <div className="fv-page-content">
             <Outlet />
           </div>

@@ -1,6 +1,5 @@
 package com.example.app.dto.response;
 
-import com.example.app.dto.response.OperatorResponse;
 import com.example.app.entity.VendingMachine;
 import com.fasterxml.jackson.annotation.JsonInclude;
 
@@ -35,7 +34,7 @@ public record MachineResponse(
                         machine.getLocation().getAddress()
                 ),
                 machine.getLocation().getName(),
-                OperatorResponse.from(machine.getOperator()),
+                OperatorResponse.from(machine.getOperatorId()),
                 machine.getLastPingAt(),
                 machine.getTempMinThreshold(),
                 machine.getTempMaxThreshold(),

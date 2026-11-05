@@ -47,9 +47,8 @@ public class VendingMachine {
     @Column(nullable = false, length = 20)
     private MachineStatus status = MachineStatus.ONLINE;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "operator_id", nullable = false)
-    private Operator operator;
+    @Column(name = "operator_id", nullable = false)
+    private Long operatorId;
 
     @Column(name = "last_ping_at")
     private LocalDateTime lastPingAt;
@@ -63,8 +62,8 @@ public class VendingMachine {
     protected VendingMachine() {
     }
 
-    public VendingMachine(String serialNumber, String name, String model, Location location, Operator operator) {
-        this(serialNumber, name, model, location, operator,
+    public VendingMachine(String serialNumber, String name, String model, Location location, Long operatorId) {
+        this(serialNumber, name, model, location, operatorId,
                 new BigDecimal("2.00"), new BigDecimal("8.00"));
     }
 
@@ -73,7 +72,7 @@ public class VendingMachine {
             String name,
             String model,
             Location location,
-            Operator operator,
+            Long operatorId,
             BigDecimal tempMinThreshold,
             BigDecimal tempMaxThreshold
     ) {
@@ -81,7 +80,7 @@ public class VendingMachine {
         this.name = name;
         this.model = model;
         this.location = location;
-        this.operator = operator;
+        this.operatorId = operatorId;
         this.tempMinThreshold = tempMinThreshold;
         this.tempMaxThreshold = tempMaxThreshold;
     }
@@ -110,8 +109,8 @@ public class VendingMachine {
         return status;
     }
 
-    public Operator getOperator() {
-        return operator;
+    public Long getOperatorId() {
+        return operatorId;
     }
 
     public LocalDateTime getLastPingAt() {
@@ -126,13 +125,13 @@ public class VendingMachine {
         return tempMaxThreshold;
     }
 
-    public void update(String serialNumber, String name, String model, Location location, Operator operator,
+    public void update(String serialNumber, String name, String model, Location location, Long operatorId,
                        BigDecimal tempMinThreshold, BigDecimal tempMaxThreshold) {
         this.serialNumber = serialNumber;
         this.name = name;
         this.model = model;
         this.location = location;
-        this.operator = operator;
+        this.operatorId = operatorId;
         this.tempMinThreshold = tempMinThreshold;
         this.tempMaxThreshold = tempMaxThreshold;
     }
