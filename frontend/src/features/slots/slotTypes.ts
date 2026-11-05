@@ -13,10 +13,12 @@ export interface MachineSlot {
   status: string;
 
   // Thông tin sản phẩm
-  productId: number | null;
-  productName: string | null;
+  productId?: number | null;
+  productName?: string | null;
   productPrice: number | null;
   productImageUrl: string | null;
+  id?: number;          
+  price?: number;
 
   // Danh sách lô hàng (không bắt buộc)
   batches?: SlotBatchDetail[];
