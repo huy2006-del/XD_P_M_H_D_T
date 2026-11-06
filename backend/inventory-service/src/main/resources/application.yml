@@ -12,8 +12,25 @@ spring:
     hibernate:
       ddl-auto: update
     open-in-view: false
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
 
 eureka:
   client:
     service-url:
       defaultZone: ${EUREKA_SERVER_URL:http://localhost:8761/eureka/}
+
+rabbitmq:
+  exchange:
+    order: freshvend.order.exchange
+  routing:
+    key:
+      paid: order.paid
+
+vietqr:
+  bank-id: MB
+  account-no: "0000000000"
+  account-name: FRESHVEND

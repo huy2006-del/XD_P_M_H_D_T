@@ -29,7 +29,7 @@ spring:
         - id: inventory-service
           uri: lb://inventory-service
           predicates:
-            - Path=/api/v1/products/**,/api/v1/batches/**,/uploads/products/**,/api/v1/restock-sessions/**
+            - Path=/api/v1/products/**,/api/v1/batches/**,/uploads/products/**,/api/v1/restock-sessions/**,/api/v1/orders/**,/api/v1/payments/**,/api/v1/analytics/**,/api/v1/reports/**
         - id: machine-coldchain-service
           uri: lb://machine-coldchain-service
           predicates:
