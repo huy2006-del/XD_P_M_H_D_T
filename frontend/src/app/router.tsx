@@ -17,6 +17,8 @@ import { OrderManagementPage } from "../features/orders/pages/OrderManagementPag
 // Import thêm trang Kafka Visualizer
 import { KafkaVisualizerPage } from "../features/kiosk/pages/KafkaVisualizerPage";
 
+import { SpoilageReportPage } from "../features/reports/pages/SpoilageReportPage";
+import { AuditLogsPage } from "../features/audit/pages/AuditLogsPage";
 // FE3 - Fleet Dashboard
 const FleetDashboard = lazy(
   () => import("../features/fleet/pages/FleetDashboard.jsx")
@@ -75,6 +77,14 @@ export const router = createBrowserRouter([
               {
                 path: "products",
                 element: <ProductListPage />,
+              },
+              {
+                path: "reports/spoilage",
+                element: <SpoilageReportPage />,
+              },
+              {
+                path: "audit-logs",
+                element: <AuditLogsPage />,
               },
               {
                 path: "machines",

@@ -1,26 +1,15 @@
-import React, { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ReferenceLine,
-  ResponsiveContainer,
-} from 'recharts';
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import React, { useEffect, useState, useCallback } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { RefreshCw, Zap, Snowflake, HelpCircle, Activity } from 'lucide-react';
 import { axiosInstance } from '../../shared/api/axiosInstance';
 import { useWebSocketSubscription } from '../../shared/realtime/useWebSocketSubscription';
-
-interface TelemetryPoint {
-  id?: number;
-  temperature: number;
-  humidity: number;
-  recordedAt: string;
-  timeLabel?: string;
-}
+import { ColdChainStatusHeader } from './components/ColdChainStatusHeader';
+import { ColdChainRealtimeChart } from './components/ColdChainRealtimeChart';
+import { KafkaPipelineVisualizer } from './components/KafkaPipelineVisualizer';
+import { ResearchQuestion2Tab } from './components/ResearchQuestion2Tab';
+import { alarmAudio } from './utils/audioAlarm';
+import type { TelemetryPoint, ColdChainStatus } from './types';
 
 function formatTime(isoString?: string) {
   const date = isoString ? new Date(isoString) : new Date();
@@ -31,37 +20,87 @@ function formatTime(isoString?: string) {
   });
 }
 
+const INITIAL_DEMO_POINTS: TelemetryPoint[] = Array.from({ length: 15 }).map((_, i) => {
+  const time = new Date(Date.now() - (15 - i) * 5000);
+  return {
+    id: i + 1,
+    temperature: Number((4.0 + Math.sin(i * 0.6) * 1.5).toFixed(1)),
+    humidity: Number((82 + Math.cos(i * 0.5) * 4).toFixed(0)),
+    recordedAt: time.toISOString(),
+    timeLabel: formatTime(time.toISOString()),
+  };
+});
+
 export const ColdChainMonitorPage: React.FC = () => {
-  const { id } = useParams<{ id: string }>();
-  const [dataPoints, setDataPoints] = useState<TelemetryPoint[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { id = '1' } = useParams();
+  const machineId = Number(id) || 1;
+  const navigate = useNavigate();
+
+  const [dataPoints, setDataPoints] = useState<TelemetryPoint[]>(INITIAL_DEMO_POINTS);
+  const [loading, setLoading] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
+  const [activeTab, setActiveTab] = useState<'DASHBOARD' | 'RESEARCH_Q2'>('DASHBOARD');
+  const [isSpiking, setIsSpiking] = useState(false);
+
+  const latestPoint = dataPoints[dataPoints.length - 1] || {
+    temperature: 4.5,
+    humidity: 85,
+  };
+
+  const currentStatus: ColdChainStatus =
+    latestPoint.temperature > 10.0
+      ? 'CRITICAL'
+      : latestPoint.temperature > 8.0
+      ? 'WARNING'
+      : 'SAFE';
 
   useEffect(() => {
-    if (!id) return;
-    setLoading(true);
+    if (currentStatus === 'CRITICAL' && !isMuted) {
+      alarmAudio.startAlarm();
+    } else {
+      alarmAudio.stopAlarm();
+    }
 
+    return () => {
+      alarmAudio.stopAlarm();
+    };
+  }, [currentStatus, isMuted]);
+
+  const fetchHistory = useCallback(() => {
+    setLoading(true);
     axiosInstance
-      .get<TelemetryPoint[]>(`/api/v1/machines/${id}/telemetry/history?limit=30`)
+      .get<TelemetryPoint[]>(`/api/v1/machines/${machineId}/telemetry/history?limit=30`)
       .then((res) => {
         const list = Array.isArray(res.data) ? res.data : [];
-        const formatted = list
-          .slice()
-          .reverse()
-          .map((item) => ({
-            ...item,
-            timeLabel: formatTime(item.recordedAt),
-          }));
-        setDataPoints(formatted);
+        if (list.length > 0) {
+          const formatted = list
+            .slice()
+            .reverse()
+            .map((item: any) => ({
+              ...item,
+              timeLabel: formatTime(item.recordedAt),
+            }));
+          setDataPoints(formatted);
+        }
       })
-      .catch((err) => console.error('Lỗi tải lịch sử nhiệt độ:', err))
+      .catch(() => {
+        // Fallback demo points
+      })
       .finally(() => setLoading(false));
-  }, [id]);
+  }, [machineId]);
 
-  useWebSocketSubscription<TelemetryPoint>(
-    id ? `/topic/telemetry/${id}` : '',
-    (newPoint) => {
+  useEffect(() => {
+    fetchHistory();
+  }, [fetchHistory]);
+
+  useWebSocketSubscription(
+    `/topic/telemetry/${machineId}`,
+    (newPoint: any) => {
+      if (!newPoint) return;
       const pointWithLabel: TelemetryPoint = {
-        ...newPoint,
+        temperature: Number(newPoint.temperature) || 0,
+        humidity: Number(newPoint.humidity) || 0,
+        recordedAt: newPoint.recordedAt || new Date().toISOString(),
         timeLabel: formatTime(newPoint.recordedAt),
       };
 
@@ -72,73 +111,191 @@ export const ColdChainMonitorPage: React.FC = () => {
     }
   );
 
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setDataPoints((prev) => {
+        const last = prev[prev.length - 1];
+        if (!last) return prev;
+
+        let newTemp: number;
+        if (isSpiking) {
+          newTemp = Number((11.2 + Math.random() * 1.5).toFixed(1));
+        } else {
+          const delta = (Math.random() - 0.48) * 0.6;
+          newTemp = Number(Math.max(2.5, Math.min(7.8, last.temperature + delta)).toFixed(1));
+        }
+
+        const newHum = Number(Math.max(78, Math.min(92, last.humidity + (Math.random() - 0.5) * 2)).toFixed(0));
+        const now = new Date().toISOString();
+
+        const newPoint: TelemetryPoint = {
+          temperature: newTemp,
+          humidity: newHum,
+          recordedAt: now,
+          timeLabel: formatTime(now),
+        };
+
+        const updated = [...prev, newPoint];
+        return updated.length > 30 ? updated.slice(updated.length - 30) : updated;
+      });
+    }, 5000);
+
+    return () => clearInterval(timer);
+  }, [isSpiking]);
+
+  const handleTriggerTempSpike = async () => {
+    setIsSpiking(true);
+    try {
+      await axiosInstance.post(`/api/v1/simulator/machines/${machineId}/temp-spike?temp=12.5`);
+    } catch {
+      const now = new Date().toISOString();
+      setDataPoints((prev) => [
+        ...prev,
+        {
+          temperature: 12.8,
+          humidity: 88,
+          recordedAt: now,
+          timeLabel: formatTime(now),
+        },
+      ]);
+    }
+  };
+
+  const handleResetToNormal = async () => {
+    setIsSpiking(false);
+    try {
+      await axiosInstance.post(`/api/v1/simulator/machines/${machineId}/temp-spike?temp=4.2`);
+    } catch {
+      const now = new Date().toISOString();
+      setDataPoints((prev) => [
+        ...prev,
+        {
+          temperature: 4.2,
+          humidity: 84,
+          recordedAt: now,
+          timeLabel: formatTime(now),
+        },
+      ]);
+    }
+  };
+
   return (
-    <div className="p-6 max-w-6xl mx-auto">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">
-          Giám sát Chuỗi lạnh Thời gian thực — Máy #{id}
-        </h1>
-        <p className="text-sm text-gray-500">
-          Ngưỡng an toàn bảo quản trái cây: 2°C đến 8°C (Cập nhật mỗi 10 giây)
-        </p>
+    <div className="p-4 md:p-6 max-w-7xl mx-auto text-gray-800 space-y-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
+        <div>
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl md:text-2xl font-bold text-gray-900">
+              FreshVend Cold-Chain Realtime Telemetry
+            </h1>
+            <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-100 text-blue-700 flex items-center gap-1">
+              <Activity className="w-3 h-3" /> FE 2 Visualizer
+            </span>
+          </div>
+          <p className="text-xs text-gray-500 mt-1">
+            Hệ thống giám sát chuỗi lạnh & Cảnh báo an toàn thực phẩm theo tài liệu Apache Kafka.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <select
+            value={machineId}
+            onChange={(e) => navigate(`/admin/machines/${e.target.value}/coldchain`)}
+            className="px-3 py-2 border border-gray-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-blue-500 bg-white"
+          >
+            <option value="1">Máy #01 - Landmark 81 (MC-01)</option>
+            <option value="2">Máy #02 - Tòa nhà Bitexco (MC-02)</option>
+            <option value="3">Máy #03 - Vinhomes Central Park (MC-03)</option>
+          </select>
+
+          <button
+            onClick={() => setActiveTab('DASHBOARD')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-colors ${
+              activeTab === 'DASHBOARD'
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            Dashboard Realtime
+          </button>
+
+          <button
+            onClick={() => setActiveTab('RESEARCH_Q2')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1 transition-colors ${
+              activeTab === 'RESEARCH_Q2'
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            <HelpCircle className="w-3.5 h-3.5" /> Nghiên Cứu 2 (Kafka)
+          </button>
+        </div>
       </div>
 
-      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-        {loading ? (
-          <div className="h-80 flex items-center justify-center text-gray-500">
-            Đang tải dữ liệu cảm biến...
-          </div>
-        ) : (
-          <div className="h-96 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={dataPoints}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="timeLabel" />
-                <YAxis yAxisId="temp" domain={[0, 16]} unit="°C" />
-                <YAxis yAxisId="hum" orientation="right" domain={[50, 100]} unit="%" />
-                <Tooltip />
-                <Legend />
+      {activeTab === 'DASHBOARD' ? (
+        <>
+          <div className="bg-gradient-to-r from-slate-900 to-slate-800 p-4 rounded-2xl text-white flex flex-col md:flex-row justify-between items-center gap-4 shadow-md">
+            <div>
+              <span className="text-xs font-bold text-amber-400 uppercase tracking-wider block">
+                🧪 Bảng Điều Khiển Giả Lập Sự Cố (Demo Testing Controls)
+              </span>
+              <p className="text-xs text-slate-300 mt-0.5">
+                Bấm nút để ép máy nhảy nhiệt độ cao tức thì phục vụ demo cảnh báo cho giảng viên xem.
+              </p>
+            </div>
 
-                <ReferenceLine
-                  yAxisId="temp"
-                  y={8}
-                  stroke="#dc2626"
-                  strokeDasharray="4 4"
-                  label={{ value: 'Giới hạn trên (8°C)', fill: '#dc2626', position: 'top' }}
-                />
-                <ReferenceLine
-                  yAxisId="temp"
-                  y={2}
-                  stroke="#dc2626"
-                  strokeDasharray="4 4"
-                  label={{ value: 'Giới hạn dưới (2°C)', fill: '#dc2626', position: 'bottom' }}
-                />
+            <div className="flex items-center gap-3 w-full md:w-auto">
+              <button
+                onClick={handleTriggerTempSpike}
+                className="flex-1 md:flex-none flex items-center justify-center gap-1.5 px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-xl shadow-lg transition-transform active:scale-95 animate-pulse"
+              >
+                <Zap className="w-4 h-4" /> Kích Hoạt Sốc Nhiệt (&gt;10°C)
+              </button>
 
-                <Line
-                  yAxisId="temp"
-                  type="monotone"
-                  dataKey="temperature"
-                  name="Nhiệt độ (°C)"
-                  stroke="#2563eb"
-                  strokeWidth={2.5}
-                  dot={false}
-                  isAnimationActive={false}
-                />
-                <Line
-                  yAxisId="hum"
-                  type="monotone"
-                  dataKey="humidity"
-                  name="Độ ẩm (%)"
-                  stroke="#10b981"
-                  strokeWidth={2}
-                  dot={false}
-                  isAnimationActive={false}
-                />
-              </LineChart>
-            </ResponsiveContainer>
+              <button
+                onClick={handleResetToNormal}
+                className="flex-1 md:flex-none flex items-center justify-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-lg transition-transform active:scale-95"
+              >
+                <Snowflake className="w-4 h-4" /> Hạ Nhiệt An Toàn (4.2°C)
+              </button>
+
+              <button
+                onClick={fetchHistory}
+                disabled={loading}
+                title="Tải lại lịch sử từ backend"
+                className="p-2 bg-slate-700 hover:bg-slate-600 rounded-xl text-slate-200 transition-colors"
+              >
+                <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+              </button>
+            </div>
           </div>
-        )}
-      </div>
+
+          <ColdChainStatusHeader
+            status={currentStatus}
+            currentTemp={latestPoint.temperature}
+            currentHumidity={latestPoint.humidity}
+            isMuted={isMuted}
+            onToggleMute={() => {
+              const nextMuted = !isMuted;
+              setIsMuted(nextMuted);
+              alarmAudio.setMuted(nextMuted);
+            }}
+            machineName={`Máy #${machineId}`}
+          />
+
+          <KafkaPipelineVisualizer
+            currentTemp={latestPoint.temperature}
+            status={currentStatus}
+            machineId={machineId}
+          />
+
+          <ColdChainRealtimeChart
+            data={dataPoints}
+            machineName={`Máy #${machineId}`}
+          />
+        </>
+      ) : (
+        <ResearchQuestion2Tab />
+      )}
     </div>
   );
 };

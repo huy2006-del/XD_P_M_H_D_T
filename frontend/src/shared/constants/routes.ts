@@ -6,6 +6,8 @@ export const ROUTES = {
     DASHBOARD: '/admin/dashboard',
     PRODUCTS: '/admin/products',
     MACHINES: '/admin/machines',
+    REPORTS_SPOILAGE: '/admin/reports/spoilage', // FE2 - Task 6.9
+    AUDIT_LOGS: '/admin/audit-logs',
   },
   OPERATOR: {
     ROOT: '/operator',

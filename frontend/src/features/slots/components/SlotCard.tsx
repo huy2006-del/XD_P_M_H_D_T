@@ -12,7 +12,7 @@ type SlotCardProps = {
 };
 
 // Emoji dự phòng khi ảnh không tải được
-function getFruitIcon(name: string | null) {
+function getFruitIcon(name: string | null | undefined) {
   const text = (name ?? "").toLowerCase();
 
   if (text.includes("tao") || text.includes("táo")) {
@@ -31,7 +31,7 @@ function getFruitIcon(name: string | null) {
 }
 
 // Ảnh trái cây trong thư mục public/fruits
-function getFruitImage(name: string | null): string | null {
+function getFruitImage(name: string | null | undefined) {
   const text = (name ?? "").toLowerCase();
 
   if (text.includes("tao") || text.includes("táo")) {

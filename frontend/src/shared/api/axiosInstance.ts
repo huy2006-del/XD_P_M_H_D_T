@@ -2,6 +2,10 @@ import axios, { AxiosError } from "axios";
 import { useAuthStore } from "../../features/auth/authStore";
 import { toast } from "sonner"; // Thêm thư viện hiển thị thông báo
 
+interface ErrorResponseData {
+  message?: string;
+}
+
 // Ưu tiên cấu hình API của FE2, hỗ trợ cả biến môi trường FE1
 const BASE_URL =
   import.meta.env.VITE_API_URL ||
@@ -45,7 +49,7 @@ axiosInstance.interceptors.request.use(
 // Nâng cấp: Tự động xử lý lỗi 401 và hiển thị Toast cho các lỗi khác
 axiosInstance.interceptors.response.use(
   (response) => response,
-  (error: AxiosError<any>) => {
+  (error: AxiosError<ErrorResponseData>) => {
     // 1. Xử lý mất phiên đăng nhập (401)
     if (error.response?.status === 401) {
       useAuthStore.getState().logout();

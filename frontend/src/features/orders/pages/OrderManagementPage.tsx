@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { Filter, Calendar, Monitor, RefreshCw } from 'lucide-react';
 import type { Order, OrderFilterParams } from '../orderService';
 import { orderService } from '../orderService';
@@ -22,11 +22,11 @@ export const OrderManagementPage: React.FC = () => {
     date: '', machineId: '', status: '',
   });
 
-  const fetchOrders = async () => {
+  const fetchOrders = useCallback(async () => {
     try {
       setLoading(true);
       const cleanFilters = Object.fromEntries(
-        Object.entries(filters).filter(([_, v]) => v !== '')
+        Object.entries(filters).filter(([, v]) => v !== '')
       );
       const data = await orderService.getOrders(cleanFilters);
       setOrders(Array.isArray(data) ? data : []);
@@ -36,11 +36,11 @@ export const OrderManagementPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filters]);
 
   useEffect(() => {
     fetchOrders();
-  }, [filters]);
+  }, [fetchOrders]);
 
   const handleFilterChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
