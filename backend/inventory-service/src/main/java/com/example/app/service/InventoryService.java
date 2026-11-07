@@ -202,3 +202,54 @@ public class InventoryService {
 
         Instant startedAt = Instant.now();
         LocalDate businessDate = LocalDate.ofInstant(startedAt, RESTOCK_BUSINESS_ZONE);
+        List<Integer> numbers = restockJdbc.query("""
+                INSERT INTO restock_session_daily_counters AS counter (business_date, last_number)
+                VALUES (:day, 1)
+                ON CONFLICT (business_date) DO UPDATE SET last_number = counter.last_number + 1
+                WHERE counter.last_number < 999
+                RETURNING last_number
+                """, Map.of("day", businessDate), (row, rowNum) -> row.getInt(1));
+        if (numbers.isEmpty()) throw new BusinessRuleException("Đã hết mã phiên nạp cho ngày " + businessDate);
+        String code = "RS-" + businessDate.format(DateTimeFormatter.BASIC_ISO_DATE)
+                + String.format(Locale.ROOT, "-%03d", numbers.get(0));
+        return restockJdbc.queryForObject("""
+                INSERT INTO restock_sessions (session_code, machine_id, operator_id, status, started_at, notes)
+                VALUES (:code, :machineId, :operatorId, 'IN_PROGRESS', :startedAt, :notes)
+                RETURNING *
+                """, new MapSqlParameterSource("code", code).addValue("machineId", machineId)
+                .addValue("operatorId", operatorId).addValue("startedAt", startedAt.atOffset(ZoneOffset.UTC))
+                .addValue("notes", notes), SESSION_ROW);
+    }
+
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public RestockItem addRestockItem(long sessionId, UUID operatorId, long slotId, long batchId, int quantity) {
+        if (slotId <= 0 || batchId <= 0 || quantity <= 0) {
+            throw new IllegalArgumentException("slotId, batchId and quantity must be positive");
+        }
+        RestockSession session = lockRestockSession(sessionId, operatorId);
+        requireInProgress(session);
+        MachineRestockSlot slot = requireMachineSlot(machineSlotsById(session.machineId()), slotId);
+        FruitBatch batch = batches.findById(batchId)
+                .orElseThrow(() -> new ResourceNotFoundException("Batch", batchId));
+        validateSlotProduct(slot.productId(), batch);
+
+        List<RestockItem> items = restockJdbc.query("""
+                INSERT INTO restock_items AS item
+                    (session_id, slot_id, batch_id, quantity_added, slot_code, product_name, batch_code)
+                VALUES (:sessionId, :slotId, :batchId, :quantity, :slotCode, :productName, :batchCode)
+                ON CONFLICT (session_id, slot_id, batch_id) DO UPDATE
+                SET quantity_added = item.quantity_added + EXCLUDED.quantity_added
+                WHERE CAST(item.quantity_added AS bigint) + EXCLUDED.quantity_added <= 2147483647
+                RETURNING *
+                """, Map.of("sessionId", sessionId, "slotId", slotId, "batchId", batchId,
+                "quantity", quantity, "slotCode", slot.slotCode(), "productName", batch.getProduct().getName(),
+                "batchCode", batch.getBatchCode()), ITEM_ROW);
+        if (items.isEmpty()) throw new BusinessRuleException("Số lượng mục nạp vượt giới hạn.");
+        return items.get(0);
+    }
+
+    public RestockCompletion completeRestockSession(long sessionId, UUID operatorId, String notes) {
+        RestockSession session = Objects.requireNonNull(restockTransaction.execute(
+                transaction -> completeRestockInInventory(sessionId, operatorId, notes)));
+        boolean synced = true;
+        for (long slotId : session.items().stream().map(RestockItem::slotId).distinct().sorted().toList()) {
