@@ -151,3 +151,54 @@ public class InventoryService {
         // Gửi các thay đổi JPA xuống database trước khi gọi Machine Service, nhưng chưa commit.
         slotInventory.flush();
         // Machine Service ghi tồn trong giao dịch riêng. Rollback tại Inventory không hoàn tác được PATCH.
+        machineSlots.updateStock(slotId, new MachineSlotInventoryRequest((int) (currentStock + quantity)));
+        return SlotInventoryItem.from(row);
+    }
+
+    private void validateLoadBatch(long slotId, FruitBatch batch, long quantity, LocalDate today) {
+        if (batch.isExpired(today)) {
+            throw new BusinessRuleException("Không thể nạp lô đã hết hạn: " + batch.getBatchCode());
+        }
+        if (slotInventory.hasNegativeQuantityForLoad(slotId, batch.getId())) {
+            throw new BusinessRuleException("Tồn kho của khay hoặc lô không hợp lệ.");
+        }
+        long notYetLoaded = batch.getQuantityRemaining() - slotInventory.sumQuantityByBatchId(batch.getId());
+        if (quantity > notYetLoaded) {
+            throw new BusinessRuleException("Lô " + batch.getBatchCode() + " chỉ còn " + Math.max(0, notYetLoaded)
+                    + " sản phẩm chưa nạp vào khay.");
+        }
+    }
+
+    private void validateSlotProduct(Long productId, FruitBatch batch) {
+        if (productId == null) {
+            throw new BusinessRuleException("Cần gán sản phẩm cho khay trước khi nạp.");
+        }
+        if (!productId.equals(batch.getProduct().getId())) {
+            throw new BusinessRuleException("Lô hàng không khớp với sản phẩm đã gán cho khay.");
+        }
+    }
+
+    private void validateCapacity(int capacity, long currentStock, long quantity) {
+        if (currentStock > (long) capacity - quantity) {
+            throw new BusinessRuleException("Số lượng nạp vượt quá sức chứa của khay.");
+        }
+    }
+
+    private SlotBatchInventory applyRestock(long slotId, FruitBatch batch, int quantity) {
+        SlotBatchInventory row = slotInventory.findBySlotIdAndBatchId(slotId, batch.getId())
+                .orElseGet(() -> new SlotBatchInventory(slotId, batch, 0));
+        row.add(quantity);
+        slotInventory.save(row);
+        movements.save(new StockMovement(slotId, batch, MovementType.RESTOCK, quantity));
+        return row;
+    }
+
+    /** operatorId phải đến từ tác nhân đã được xác thực bởi bên gọi. */
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public RestockSession createRestockSession(long machineId, UUID operatorId, String notes) {
+        if (machineId <= 0) throw new IllegalArgumentException("machineId must be positive");
+        Objects.requireNonNull(operatorId, "operatorId");
+        machineSlots.getMachineSlots(machineId);
+
+        Instant startedAt = Instant.now();
+        LocalDate businessDate = LocalDate.ofInstant(startedAt, RESTOCK_BUSINESS_ZONE);
