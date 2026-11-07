@@ -178,15 +178,39 @@ consumer checks the machine and slot: a machine that is not `ONLINE`
 slot, or `simulateJam=true` raises `MotorJammedException` and is retried (3 attempts in
 total) before the message is dead-lettered into `order.dispense.dlq`.
 
-Order status sync: after every final outcome the machine service publishes a
+Happy path: `POST /api/v1/dispense` publishes to `freshvend.direct.exchange`
+(routing key `dispense.command`) → `dispense.command.queue`. The consumer logs the
+servo rotation (2–3 s) and the drop sensor, saves the `dispense_operations` record,
+notifies the kiosk on `/topic/dispense/{machineId}`, publishes the result event and
+only then calls `channel.basicAck()`.
+
+Order status sync and stock: after every final outcome the machine service publishes a
 `DispenseResultEvent` to `freshvend.order.exchange` with routing key
 `order.dispense.result` (queue `order.dispense.result.queue`). `inventory-service`
-consumes it and sets `orders.dispense_status` to `DISPENSED` or `JAMMED`; for a
-jam it also stores the refund voucher code in `orders.refund_voucher_code`
-(returned as `refundVoucherCode` by the order API). The event's `orderId` is
-matched against `order_code` first, then the numeric order id. Jammed orders
-are never overwritten by a later result. The voucher is still a generated
-compensation code; there is no voucher-redemption service in this repository.
+consumes it:
+
+- `DISPENSED` → `orders.dispense_status = COMPLETED`, then 1 item is deducted FIFO
+  from the slot's batches (`InventoryService.dispenseFIFO`), which also mirrors the new
+  `current_stock` back to the machine slot. A duplicate event never deducts twice.
+  If the stock deduction fails the order stays `COMPLETED` and the error is logged for
+  manual reconciliation.
+- `JAMMED` → `orders.dispense_status = JAMMED` and the refund voucher code is stored in
+  `orders.refund_voucher_code` (returned as `refundVoucherCode` by the order API).
+
+The event's `orderId` is matched against `order_code` first, then the numeric order id.
+The voucher is a generated compensation code; there is no voucher-redemption service
+in this repository.
+
+Upgrade notes (existing databases / brokers):
+
+- The main queue was renamed to `dispense.command.queue`. If RabbitMQ already holds a
+  `dispense.command.queue` declared by an older `inventory-service` build, delete it in
+  the management UI (or `docker compose down -v`) before starting, otherwise RabbitMQ
+  rejects the redeclaration with `PRECONDITION_FAILED`. The old `order.dispense.queue`
+  can be deleted too.
+- Hibernate may have created a check constraint on `orders.dispense_status` that does
+  not allow `COMPLETED`. If inserts/updates fail, run:
+  `ALTER TABLE orders DROP CONSTRAINT IF EXISTS orders_dispense_status_check;`
 
 ## Package layout
 
@@ -198,3 +222,4 @@ each service module.
 - `identity-service` - existing user management on port 8081
 - `inventory-service` - product, batch, FIFO stock on port 8082
 - `machine-coldchain-service` - locations, machines, slots, telemetry, simulator on port 8083
+

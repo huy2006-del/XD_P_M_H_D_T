@@ -72,23 +72,8 @@ public class RabbitConfig {
                 .with(DLQ_ROUTING_KEY);
     }
 
-    // 5. Main Queue (dispense.command.queue) có cấu hình chuyển sang DLX khi xử lý thất bại
-    @Bean
-    public Queue dispenseCommandQueue() {
-        Map<String, Object> args = new HashMap<>();
-        // Nếu tin nhắn bị reject/nack hoặc hết TTL sẽ đẩy sang freshvend.dlx
-        args.put("x-dead-letter-exchange", DLX_NAME);
-        args.put("x-dead-letter-routing-key", DLQ_ROUTING_KEY);
-        return new Queue(DISPENSE_COMMAND_QUEUE, true, false, false, args);
-    }
-
-    // 6. Binding Main Queue với Direct Exchange
-    @Bean
-    public Binding dispenseBinding(Queue dispenseCommandQueue, DirectExchange dispenseDirectExchange) {
-        return BindingBuilder.bind(dispenseCommandQueue)
-                .to(dispenseDirectExchange)
-                .with(DISPENSE_ROUTING_KEY);
-    }
+    // Queue dispense.command.queue (+ binding) do machine-coldchain-service khai báo và tiêu thụ.
+    // Không khai báo lại ở đây để tránh xung đột tham số x-dead-letter-* (PRECONDITION_FAILED).
 
     @Bean
     public TopicExchange orderExchange() {

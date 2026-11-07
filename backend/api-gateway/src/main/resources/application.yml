@@ -1,3 +1,4 @@
+
 server:
   port: ${SERVER_PORT:8080}
 
@@ -8,6 +9,9 @@ spring:
     gateway:
       server:
         webflux:
+          default-filters:
+            - DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin, RETAIN_UNIQUE
+
           globalcors:
             cors-configurations:
               '[/**]':
@@ -15,23 +19,28 @@ spring:
                 allowedMethods: [GET, POST, PUT, PATCH, DELETE, OPTIONS]
                 allowedHeaders: "*"
                 allowCredentials: true
+
           routes:
             - id: machine-websocket
               uri: lb:ws://machine-coldchain-service
               predicates:
                 - Path=/ws-freshvend/**
+
             - id: inventory-slot-stock
               uri: lb://inventory-service
               predicates:
                 - Path=/api/v1/slots/*/inventory,/api/v1/slots/*/batches,/api/v1/slots/*/dispense
+
             - id: identity-service
               uri: lb://identity-service
               predicates:
                 - Path=/api/v1/auth/**,/api/v1/users/**,/api/v1/audit-logs/**
+
             - id: inventory-service
               uri: lb://inventory-service
               predicates:
                 - Path=/api/v1/products/**,/api/v1/batches/**,/uploads/products/**,/api/v1/restock-sessions/**,/api/v1/orders/**,/api/v1/payments/**,/api/v1/analytics/**,/api/v1/reports/**
+
             - id: machine-coldchain-service
               uri: lb://machine-coldchain-service
               predicates:

@@ -85,35 +85,35 @@ public class OrderService {
 
     /**
      * Áp kết quả nhả hàng do machine-coldchain-service báo về:
-     * DISPENSED → đơn hoàn tất; JAMMED → đơn kẹt hàng, lưu mã voucher hoàn tiền cho khách.
-     * Chỉ chuyển từ PENDING (hoặc lặp lại cùng trạng thái) để tránh ghi đè kết quả cũ.
+     * DISPENSED → đơn COMPLETED; JAMMED → đơn kẹt hàng, lưu mã voucher hoàn tiền cho khách.
+     * Chỉ chuyển từ PENDING nên message trùng lặp không ghi đè hay xử lý lại.
+     *
+     * @return true nếu đơn vừa chuyển sang COMPLETED trong lần gọi này (caller cần trừ kho khay)
      */
     @Transactional
-    public void applyDispenseResult(DispenseResultEvent event) {
+    public boolean applyDispenseResult(DispenseResultEvent event) {
         Optional<Order> found = findOrderByReference(event.orderId());
         if (found.isEmpty()) {
             log.warn("[DISPENSE RESULT] Không tìm thấy đơn '{}', bỏ qua kết quả {}.",
                     event.orderId(), event.status());
-            return;
+            return false;
         }
 
         DispenseStatus target;
-        try {
-            target = DispenseStatus.valueOf(event.status());
-        } catch (IllegalArgumentException | NullPointerException exception) {
+        if ("DISPENSED".equals(event.status()) || "COMPLETED".equals(event.status())) {
+            target = DispenseStatus.COMPLETED;
+        } else if ("JAMMED".equals(event.status())) {
+            target = DispenseStatus.JAMMED;
+        } else {
             log.warn("[DISPENSE RESULT] Trạng thái không hợp lệ '{}' cho đơn {}.", event.status(), event.orderId());
-            return;
-        }
-        if (target != DispenseStatus.DISPENSED && target != DispenseStatus.JAMMED) {
-            log.warn("[DISPENSE RESULT] Bỏ qua trạng thái {} cho đơn {}.", target, event.orderId());
-            return;
+            return false;
         }
 
         Order order = found.get();
-        if (order.getDispenseStatus() != DispenseStatus.PENDING && order.getDispenseStatus() != target) {
-            log.warn("[DISPENSE RESULT] Đơn {} đang {}, không ghi đè bằng {}.",
+        if (order.getDispenseStatus() != DispenseStatus.PENDING) {
+            log.info("[DISPENSE RESULT] Đơn {} đang {}, bỏ qua kết quả {} (đã xử lý hoặc trùng lặp).",
                     order.getOrderCode(), order.getDispenseStatus(), target);
-            return;
+            return false;
         }
 
         order.setDispenseStatus(target);
@@ -123,6 +123,7 @@ public class OrderService {
         orderRepository.save(order);
         log.info("[DISPENSE RESULT] Đơn {} → {}{}", order.getOrderCode(), target,
                 order.getRefundVoucherCode() != null ? ", voucher=" + order.getRefundVoucherCode() : "");
+        return target == DispenseStatus.COMPLETED;
     }
 
     private Optional<Order> findOrderByReference(String reference) {
