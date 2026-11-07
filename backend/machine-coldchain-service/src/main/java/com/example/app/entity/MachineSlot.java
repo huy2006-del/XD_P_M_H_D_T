@@ -77,6 +77,10 @@ public class MachineSlot {
         this.status = MachineSlotStatus.JAMMED;
     }
 
+    public void markForMaintenance() {
+        this.status = MachineSlotStatus.MAINTENANCE;
+    }
+
     public void changeStatus(MachineSlotStatus status) {
         if (status == MachineSlotStatus.EMPTY && currentStock != 0) {
             throw new IllegalArgumentException("Không thể đặt khay còn hàng sang trạng thái EMPTY.");
@@ -88,7 +92,7 @@ public class MachineSlot {
     }
 
     private void refreshStockStatus() {
-        if (status != MachineSlotStatus.JAMMED) {
+        if (status != MachineSlotStatus.JAMMED && status != MachineSlotStatus.MAINTENANCE) {
             status = currentStock == 0 ? MachineSlotStatus.EMPTY : MachineSlotStatus.ACTIVE;
         }
     }

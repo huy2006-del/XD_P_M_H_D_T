@@ -153,6 +153,32 @@ Set-Location backend
 mvn clean install
 ```
 
+## Machine dispense queue (Task 5.4-5.6)
+
+Start PostgreSQL and RabbitMQ with `docker compose up -d`. RabbitMQ management UI
+is available at `http://localhost:15672` (`guest` / `guest`). The machine service
+declares the durable dispense queue and DLQ on startup. Submit a test command
+through the API Gateway:
+
+```powershell
+Invoke-RestMethod -Method Post -Uri http://localhost:8080/api/v1/dispense `
+  -ContentType 'application/json' `
+  -Body '{"orderId":"ORD-DEMO-001","machineId":"1","slotId":"A1","simulateJam":false}'
+```
+
+Set `simulateJam` to `true` to exercise three attempts, DLQ processing, a
+critical motor-jam alert, a maintenance slot state, and a persisted 100% refund
+voucher code in the machine database. Dispense outcomes are recorded in
+`dispense_operations` and sent to `/topic/dispense/{machineId}`; jam alerts are
+sent to `/topic/alerts` and `/topic/kiosk-admin`.
+
+The repository does not contain an order-owning or voucher-redemption service.
+Accordingly, `dispense_operations` is the machine service's durable execution
+record and the generated voucher is a compensation record, not a direct update
+to an order database or an externally redeemable voucher. Those authoritative
+updates must be handled by the corresponding owning service via an integration
+contract.
+
 ## Package layout
 
 The Java base package remains `com.example.app`, now independently compiled in

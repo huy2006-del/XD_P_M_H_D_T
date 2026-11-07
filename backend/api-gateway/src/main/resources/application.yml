@@ -33,7 +33,7 @@ spring:
         - id: machine-coldchain-service
           uri: lb://machine-coldchain-service
           predicates:
-            - Path=/api/v1/machines/**,/api/v1/locations/**,/api/v1/slots/**,/api/v1/simulator/**,/api/v1/alerts/**
+            - Path=/api/v1/machines/**,/api/v1/locations/**,/api/v1/slots/**,/api/v1/simulator/**,/api/v1/alerts/**,/api/v1/dispense
 
 eureka:
   client:
