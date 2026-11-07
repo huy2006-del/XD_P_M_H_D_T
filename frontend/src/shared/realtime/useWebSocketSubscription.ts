@@ -7,12 +7,15 @@ const WS_URL = import.meta.env.VITE_API_URL
   ? `${import.meta.env.VITE_API_URL}/ws-freshvend` 
   : 'http://localhost:8080/ws-freshvend';
 
-export function useWebSocketSubscription<T = any>(
+export function useWebSocketSubscription<T = unknown>(
   topic: string,
   onMessageReceived: (data: T) => void
 ) {
   const callbackRef = useRef(onMessageReceived);
-  callbackRef.current = onMessageReceived;
+
+  useEffect(() => {
+    callbackRef.current = onMessageReceived;
+  });
 
   useEffect(() => {
     if (!topic) return;

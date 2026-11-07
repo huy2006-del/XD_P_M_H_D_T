@@ -14,7 +14,10 @@ import {
   LogOut,
   Menu,
   X,
-  ShoppingCart
+  ShoppingCart,
+  FileWarning,   // Icon cho Báo cáo Hư Hỏng
+  ClipboardList,
+  Thermometer,
 } from "lucide-react";
 
 import Breadcrumb from "../shared/components/Breadcrumb";
@@ -27,6 +30,11 @@ const menuItems = [
     label: "Dashboard",
     path: "/admin/dashboard",
     icon: LayoutDashboard,
+  },
+   {
+    label: "Giám Sát Chuỗi Lạnh",
+    path: "/admin/machines/1/coldchain", // FE2 - Realtime Cold-Chain & Kafka
+    icon: Thermometer,
   },
   {
     label: "Orders",
@@ -42,6 +50,16 @@ const menuItems = [
     label: "Machines",
     path: "/admin/machines",
     icon: Monitor,
+  },
+  {
+    label: "Báo Cáo Hư Hỏng",
+    path: "/admin/reports/spoilage",
+    icon: FileWarning,
+  },
+  {
+    label: "Lịch Sử Thao Tác",
+    path: "/admin/audit-logs",
+    icon: ClipboardList,
   },
 ];
 
@@ -119,9 +137,10 @@ export default function AdminLayout() {
               <NavLink
                 key={item.path}
                 to={item.path}
-                className={({ isActive }) =>
-                  `fv-nav-link ${isActive ? "is-active" : ""}`
-                }
+                // SỬA DÒNG 140 THÀNH:
+               className={({ isActive }: { isActive: boolean }) =>
+                 `fv-nav-link ${isActive ? "is-active" : ""}`
+               }
               >
                 <Icon size={19} />
                 <span>{item.label}</span>
