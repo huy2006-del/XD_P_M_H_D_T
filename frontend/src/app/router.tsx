@@ -14,6 +14,8 @@ import KioskSimulator from "../features/kiosk/KioskSimulator";
 import MachineSlotsPage from "../features/slots/pages/MachineSlotsPage";
 import { ColdChainMonitorPage } from "../features/coldchain/ColdChainMonitorPage";
 import { OrderManagementPage } from "../features/orders/pages/OrderManagementPage";
+// Import thêm trang Kafka Visualizer
+import { KafkaVisualizerPage } from "../features/kiosk/pages/KafkaVisualizerPage";
 
 // FE3 - Fleet Dashboard
 const FleetDashboard = lazy(
@@ -32,6 +34,11 @@ export const router = createBrowserRouter([
   {
     path: "/kiosk-simulator",
     element: <KioskSimulator />,
+  },
+  // Thêm Route mới cho Kafka Visualizer ở đây
+  {
+    path: "/kafka",
+    element: <KafkaVisualizerPage />,
   },
   {
     path: "/403",
