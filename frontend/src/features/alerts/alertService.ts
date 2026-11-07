@@ -1,4 +1,5 @@
 import { axiosInstance } from '../../shared/api/axiosInstance';
+import { useAuthStore } from '../auth/authStore';
 
 export interface AlertItem {
   id: number;
@@ -9,6 +10,9 @@ export interface AlertItem {
   message: string;
   status: 'ACTIVE' | 'ACKNOWLEDGED' | 'RESOLVED';
   createdAt: string;
+  resolvedAt?: string | null;
+  resolvedBy?: string | null;
+  resolutionNote?: string | null;
 }
 
 export const alertService = {
@@ -21,7 +25,12 @@ export const alertService = {
     return res.data;
   },
   resolveAlert: async (id: number, notes: string) => {
-    const res = await axiosInstance.patch(`/api/v1/alerts/${id}/resolve`, { notes });
+    // BE (AlertResolveRequest) yêu cầu trường `resolutionNote`, không phải `notes`.
+    const resolvedBy = useAuthStore.getState().userProfile?.username;
+    const res = await axiosInstance.patch(`/api/v1/alerts/${id}/resolve`, {
+      resolutionNote: notes.trim(),
+      resolvedBy,
+    });
     return res.data;
   },
 };

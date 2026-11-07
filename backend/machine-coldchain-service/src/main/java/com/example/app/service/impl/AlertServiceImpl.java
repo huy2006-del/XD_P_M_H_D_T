@@ -13,6 +13,7 @@ import com.example.app.repository.AlertRepository;
 import com.example.app.repository.VendingMachineRepository;
 import com.example.app.service.AlertService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
@@ -51,7 +52,9 @@ public class AlertServiceImpl implements AlertService {
             specification = specification.and((root, query, builder) ->
                     builder.equal(root.get("machineId"), machineId));
         }
-        return alertRepository.findAll(specification).stream()
+        Sort newestFirst = Sort.by(Sort.Direction.DESC, "createdAt")
+                .and(Sort.by(Sort.Direction.DESC, "id"));
+        return alertRepository.findAll(specification, newestFirst).stream()
                 .map(AlertResponse::from)
                 .toList();
     }

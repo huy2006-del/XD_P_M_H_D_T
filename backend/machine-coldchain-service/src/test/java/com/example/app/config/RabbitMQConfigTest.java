@@ -35,4 +35,15 @@ class RabbitMQConfigTest {
 
         assertEquals(request, decodedMessage);
     }
+
+    @Test
+    void dispenseResultQueueIsBoundToOrderExchange() {
+        var queue = config.dispenseResultQueue();
+        var exchange = config.orderTopicExchange();
+        var binding = config.dispenseResultBinding(queue, exchange);
+
+        assertEquals(RabbitMQConfig.DISPENSE_RESULT_QUEUE, queue.getName());
+        assertEquals(RabbitMQConfig.ORDER_EXCHANGE, binding.getExchange());
+        assertEquals(RabbitMQConfig.DISPENSE_RESULT_ROUTING_KEY, binding.getRoutingKey());
+    }
 }

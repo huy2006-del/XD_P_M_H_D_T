@@ -6,6 +6,10 @@ import com.example.app.entity.Alert;
 import com.example.app.entity.DispenseOperation;
 import com.example.app.entity.DispenseStatus;
 import com.example.app.entity.MachineSlot;
+import com.example.app.entity.MachineSlotStatus;
+import com.example.app.entity.MachineStatus;
+import com.example.app.entity.VendingMachine;
+import com.example.app.exception.MotorJammedException;
 import com.example.app.repository.AlertRepository;
 import com.example.app.repository.DispenseOperationRepository;
 import com.example.app.repository.MachineSlotRepository;
@@ -18,8 +22,10 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.Optional;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
@@ -65,5 +71,42 @@ class DispenseWorkflowServiceTest {
         assertTrue(operation.getRefundVoucherCode().startsWith("REFUND_VOUCHER_ORD-"));
         assertEquals("JAMMED", result.notification().status());
         assertEquals("MOTOR_JAM", result.alert().alertType());
+    }
+
+    @Test
+    void operationalMachineWithHealthySlotPassesMotorCheck() {
+        DispenseRequestMessage request = new DispenseRequestMessage("ORD-60", "12", "A1", false);
+        mockSlot(MachineStatus.ONLINE, MachineSlotStatus.ACTIVE);
+
+        assertDoesNotThrow(() -> dispenseWorkflowService.assertMotorOperational(request));
+    }
+
+    @Test
+    void machineThatIsNotOnlineThrowsMotorJammed() {
+        DispenseRequestMessage request = new DispenseRequestMessage("ORD-61", "12", "A1", false);
+        mockSlot(MachineStatus.OUT_OF_ORDER, MachineSlotStatus.ACTIVE);
+
+        assertThrows(MotorJammedException.class,
+                () -> dispenseWorkflowService.assertMotorOperational(request));
+    }
+
+    @Test
+    void jammedOrMaintenanceSlotThrowsMotorJammed() {
+        DispenseRequestMessage request = new DispenseRequestMessage("ORD-62", "12", "A1", false);
+        mockSlot(MachineStatus.ONLINE, MachineSlotStatus.MAINTENANCE);
+
+        assertThrows(MotorJammedException.class,
+                () -> dispenseWorkflowService.assertMotorOperational(request));
+    }
+
+    private void mockSlot(MachineStatus machineStatus, MachineSlotStatus slotStatus) {
+        VendingMachine machine = org.mockito.Mockito.mock(VendingMachine.class);
+        when(machine.getStatus()).thenReturn(machineStatus);
+        MachineSlot slot = org.mockito.Mockito.mock(MachineSlot.class);
+        when(slot.getMachine()).thenReturn(machine);
+        org.mockito.Mockito.lenient().when(slot.getStatus()).thenReturn(slotStatus);
+        org.mockito.Mockito.lenient().when(slot.getSlotCode()).thenReturn("A1");
+        when(machineSlotRepository.findByMachineIdAndSlotCodeIgnoreCase(12L, "A1"))
+                .thenReturn(Optional.of(slot));
     }
 }

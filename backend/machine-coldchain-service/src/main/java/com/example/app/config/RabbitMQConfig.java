@@ -7,6 +7,7 @@ import org.springframework.amqp.core.BindingBuilder;
 import org.springframework.amqp.core.DirectExchange;
 import org.springframework.amqp.core.Queue;
 import org.springframework.amqp.core.QueueBuilder;
+import org.springframework.amqp.core.TopicExchange;
 import org.springframework.amqp.rabbit.config.SimpleRabbitListenerContainerFactory;
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -26,6 +27,11 @@ public class RabbitMQConfig {
     public static final String DEAD_LETTER_EXCHANGE = "freshvend.dlx.exchange";
     public static final String DEAD_LETTER_QUEUE = "order.dispense.dlq";
     public static final String DEAD_LETTER_ROUTING_KEY = "order.dispense.dlq.key";
+
+    /** Kênh báo kết quả nhả hàng về cho inventory-service (chủ sở hữu bảng orders). */
+    public static final String ORDER_EXCHANGE = "freshvend.order.exchange";
+    public static final String DISPENSE_RESULT_QUEUE = "order.dispense.result.queue";
+    public static final String DISPENSE_RESULT_ROUTING_KEY = "order.dispense.result";
 
     @Bean
     public DirectExchange freshVendDirectExchange() {
@@ -64,6 +70,24 @@ public class RabbitMQConfig {
         return BindingBuilder.bind(dispenseDeadLetterQueue)
                 .to(deadLetterExchange)
                 .with(DEAD_LETTER_ROUTING_KEY);
+    }
+
+    @Bean
+    public TopicExchange orderTopicExchange() {
+        return new TopicExchange(ORDER_EXCHANGE, true, false);
+    }
+
+    @Bean
+    public Queue dispenseResultQueue() {
+        return QueueBuilder.durable(DISPENSE_RESULT_QUEUE).build();
+    }
+
+    @Bean
+    public Binding dispenseResultBinding(@Qualifier("dispenseResultQueue") Queue dispenseResultQueue,
+                                         @Qualifier("orderTopicExchange") TopicExchange orderTopicExchange) {
+        return BindingBuilder.bind(dispenseResultQueue)
+                .to(orderTopicExchange)
+                .with(DISPENSE_RESULT_ROUTING_KEY);
     }
 
     @Bean

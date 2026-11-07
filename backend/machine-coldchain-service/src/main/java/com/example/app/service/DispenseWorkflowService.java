@@ -10,7 +10,10 @@ import com.example.app.entity.AlertType;
 import com.example.app.entity.DispenseOperation;
 import com.example.app.entity.DispenseStatus;
 import com.example.app.entity.MachineSlot;
+import com.example.app.entity.MachineSlotStatus;
+import com.example.app.entity.MachineStatus;
 import com.example.app.exception.BusinessRuleException;
+import com.example.app.exception.MotorJammedException;
 import com.example.app.exception.ResourceNotFoundException;
 import com.example.app.repository.AlertRepository;
 import com.example.app.repository.DispenseOperationRepository;
@@ -33,6 +36,28 @@ public class DispenseWorkflowService {
     @Transactional(readOnly = true)
     public boolean isCompleted(String orderId) {
         return dispenseOperationRepository.existsById(orderId);
+    }
+
+    /**
+     * Kiểm tra trạng thái cơ khí sau khi motor quay: máy không ONLINE (lỗi / OUT_OF_ORDER / bảo trì / offline)
+     * hoặc khay đang JAMMED / MAINTENANCE thì coi như kẹt hàng.
+     *
+     * @throws MotorJammedException khi máy hoặc khay không thể nhả hàng
+     */
+    @Transactional(readOnly = true)
+    public void assertMotorOperational(DispenseRequestMessage request) {
+        long machineId = parseMachineId(request.machineId());
+        MachineSlot slot = findSlot(machineId, request.slotId());
+        MachineStatus machineStatus = slot.getMachine().getStatus();
+        if (machineStatus != MachineStatus.ONLINE) {
+            throw new MotorJammedException(
+                    "Máy " + machineId + " đang ở trạng thái " + machineStatus + ", không thể nhả hàng.");
+        }
+        MachineSlotStatus slotStatus = slot.getStatus();
+        if (slotStatus == MachineSlotStatus.JAMMED || slotStatus == MachineSlotStatus.MAINTENANCE) {
+            throw new MotorJammedException(
+                    "Khay " + slot.getSlotCode() + " đang ở trạng thái " + slotStatus + ", không thể nhả hàng.");
+        }
     }
 
     @Transactional

@@ -172,12 +172,21 @@ voucher code in the machine database. Dispense outcomes are recorded in
 `dispense_operations` and sent to `/topic/dispense/{machineId}`; jam alerts are
 sent to `/topic/alerts` and `/topic/kiosk-admin`.
 
-The repository does not contain an order-owning or voucher-redemption service.
-Accordingly, `dispense_operations` is the machine service's durable execution
-record and the generated voucher is a compensation record, not a direct update
-to an order database or an externally redeemable voucher. Those authoritative
-updates must be handled by the corresponding owning service via an integration
-contract.
+Motor simulation takes 2–3 seconds per attempt. After the motor turns, the
+consumer checks the machine and slot: a machine that is not `ONLINE`
+(`OUT_OF_ORDER`, `ERROR`, `MAINTENANCE`, `OFFLINE`), a `JAMMED`/`MAINTENANCE`
+slot, or `simulateJam=true` raises `MotorJammedException` and is retried (3 attempts in
+total) before the message is dead-lettered into `order.dispense.dlq`.
+
+Order status sync: after every final outcome the machine service publishes a
+`DispenseResultEvent` to `freshvend.order.exchange` with routing key
+`order.dispense.result` (queue `order.dispense.result.queue`). `inventory-service`
+consumes it and sets `orders.dispense_status` to `DISPENSED` or `JAMMED`; for a
+jam it also stores the refund voucher code in `orders.refund_voucher_code`
+(returned as `refundVoucherCode` by the order API). The event's `orderId` is
+matched against `order_code` first, then the numeric order id. Jammed orders
+are never overwritten by a later result. The voucher is still a generated
+compensation code; there is no voucher-redemption service in this repository.
 
 ## Package layout
 

@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>Test WebSocket STOMP - FreshVend</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.5.1/sockjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+</head>
+<body style="font-family: Arial; padding: 20px;">
+    <h2>Kiểm tra WebSocket STOMP - FreshVend</h2>
+    <div>
+        <button onclick="connect()" style="padding: 10px; background: green; color: white; cursor: pointer;">Kết nối (Connect)</button>
+        <button onclick="disconnect()" style="padding: 10px; background: red; color: white; cursor: pointer;">Ngắt kết nối</button>
+    </div>
+    <h3>Trạng thái: <span id="status" style="color: gray;">Chưa kết nối</span></h3>
+    <h3>Dữ liệu cảnh báo nhận được Realtime:</h3>
+    <pre id="messages" style="background: #f4f4f4; padding: 10px; height: 200px; overflow-y: scroll; border: 1px solid #ccc;"></pre>
+
+    <script>
+        let stompClient = null;
+
+        function connect() {
+            var socket = new SockJS('http://localhost:8083/ws-freshvend');
+            stompClient = Stomp.over(socket);
+            
+            stompClient.connect({}, function (frame) {
+                document.getElementById('status').innerText = 'Đã kết nối thành công!';
+                document.getElementById('status').style.color = 'green';
+                console.log('Connected: ' + frame);
+
+                stompClient.subscribe('/topic/alerts', function (alertMessage) {
+                    var messageBox = document.getElementById('messages');
+                    var currentTime = new Date().toLocaleTimeString();
+                    messageBox.innerHTML += `[${currentTime}] 📥 Nhận tin: ${alertMessage.body}\n`;
+                    messageBox.scrollTop = messageBox.scrollHeight;
+                });
+            }, function(error) {
+                document.getElementById('status').innerText = 'Lỗi kết nối!';
+                document.getElementById('status').style.color = 'red';
+                console.log('STOMP error: ' + error);
+            });
+        }
+
+        function disconnect() {
+            if (stompClient !== null) {
+                stompClient.disconnect();
+            }
+            document.getElementById('status').innerText = 'Đã ngắt kết nối';
+            document.getElementById('status').style.color = 'gray';
+        }
+    </script>
+</body>
+</html>

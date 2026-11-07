@@ -21,6 +21,7 @@ public class DispenseDlqConsumer {
 
     private final DispenseWorkflowService dispenseWorkflowService;
     private final SimpMessagingTemplate messagingTemplate;
+    private final DispenseResultPublisher dispenseResultPublisher;
 
     @RabbitListener(queues = RabbitMQConfig.DEAD_LETTER_QUEUE,
             containerFactory = "rabbitListenerContainerFactory")
@@ -40,6 +41,7 @@ public class DispenseDlqConsumer {
             messagingTemplate.convertAndSend(destination, result.notification());
             messagingTemplate.convertAndSend("/topic/alerts", result.alert());
             messagingTemplate.convertAndSend("/topic/kiosk-admin", result.notification());
+            dispenseResultPublisher.publish(result.notification());
             channel.basicAck(deliveryTag, false);
         } catch (RuntimeException exception) {
             log.error("[DLQ PROCESSING FAILED] orderId={} chưa được xử lý; requeue DLQ message.",

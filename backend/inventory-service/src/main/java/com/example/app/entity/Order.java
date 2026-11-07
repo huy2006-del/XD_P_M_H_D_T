@@ -41,6 +41,9 @@ public class Order {
     @Column(name = "dispense_status", nullable = false, length = 20)
     private DispenseStatus dispenseStatus;
 
+    @Column(name = "refund_voucher_code", length = 100)
+    private String refundVoucherCode;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 

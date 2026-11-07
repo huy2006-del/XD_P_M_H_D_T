@@ -13,6 +13,7 @@ import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.amqp.rabbit.core.RabbitAdmin;
 import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
 import org.springframework.amqp.support.converter.MessageConverter;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -24,6 +25,10 @@ public class RabbitConfig {
     public static final String EXCHANGE_NAME = "freshvend.order.exchange";
     public static final String QUEUE_NAME = "order.paid.queue";
     public static final String ROUTING_KEY = "order.paid";
+
+    // Kết quả nhả hàng do machine-coldchain-service báo về (DISPENSED / JAMMED + voucher hoàn tiền)
+    public static final String DISPENSE_RESULT_QUEUE = "order.dispense.result.queue";
+    public static final String DISPENSE_RESULT_ROUTING_KEY = "order.dispense.result";
 
     public static final String DIRECT_EXCHANGE_NAME = "freshvend.direct.exchange";
     public static final String DISPENSE_COMMAND_QUEUE = "dispense.command.queue";
@@ -98,6 +103,17 @@ public class RabbitConfig {
     @Bean
     public Binding binding(Queue orderPaidQueue, TopicExchange orderExchange) {
         return BindingBuilder.bind(orderPaidQueue).to(orderExchange).with(ROUTING_KEY);
+    }
+
+    @Bean
+    public Queue dispenseResultQueue() {
+        return new Queue(DISPENSE_RESULT_QUEUE, true);
+    }
+
+    @Bean
+    public Binding dispenseResultBinding(@Qualifier("dispenseResultQueue") Queue dispenseResultQueue,
+                                         @Qualifier("orderExchange") TopicExchange orderExchange) {
+        return BindingBuilder.bind(dispenseResultQueue).to(orderExchange).with(DISPENSE_RESULT_ROUTING_KEY);
     }
 
     @Bean

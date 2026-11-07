@@ -16,6 +16,7 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
+import java.util.concurrent.ThreadLocalRandom;
 
 @Slf4j
 @Component
@@ -23,9 +24,12 @@ import java.io.IOException;
 public class DispenseConsumer {
 
     private static final int MAX_ATTEMPTS = 3;
+    private static final long MOTOR_MIN_MILLIS = 2_000L;
+    private static final long MOTOR_MAX_MILLIS = 3_000L;
     private final RabbitTemplate rabbitTemplate;
     private final SimpMessagingTemplate messagingTemplate;
     private final DispenseWorkflowService dispenseWorkflowService;
+    private final DispenseResultPublisher dispenseResultPublisher;
 
     @RabbitListener(queues = RabbitMQConfig.DISPENSE_QUEUE,
             containerFactory = "rabbitListenerContainerFactory")
@@ -41,13 +45,15 @@ public class DispenseConsumer {
         try {
             log.info("[MOTOR ROTATING] Đang kích hoạt động cơ Servo quay trục nhả hàng cho đơn: {}, slot: {}...",
                     request.orderId(), request.slotId());
-            Thread.sleep(1500L);
+            rotateServo();
             if (request.simulateJam()) {
                 throw new MotorJammedException("Motor jam được kích hoạt theo simulateJam.");
             }
+            dispenseWorkflowService.assertMotorOperational(request);
 
             DispenseNotification notification = dispenseWorkflowService.recordDispensed(request);
             messagingTemplate.convertAndSend("/topic/dispense/" + notification.machineId(), notification);
+            dispenseResultPublisher.publish(notification);
             log.info("[DISPENSED] orderId={}, slotId={}, thông báo kiosk: {}",
                     request.orderId(), notification.slotId(), notification.message());
             channel.basicAck(deliveryTag, false);
@@ -60,6 +66,11 @@ public class DispenseConsumer {
             log.error("[DISPENSE INTERRUPTED] orderId={} được requeue để xử lý lại.", request.orderId(), exception);
             channel.basicNack(deliveryTag, false, true);
         }
+    }
+
+    /** Giả lập động cơ Servo quay trục nhả hàng, mất 2-3 giây. */
+    protected void rotateServo() throws InterruptedException {
+        Thread.sleep(ThreadLocalRandom.current().nextLong(MOTOR_MIN_MILLIS, MOTOR_MAX_MILLIS + 1));
     }
 
     private void retryOrDeadLetter(DispenseRequestMessage request, Channel channel,

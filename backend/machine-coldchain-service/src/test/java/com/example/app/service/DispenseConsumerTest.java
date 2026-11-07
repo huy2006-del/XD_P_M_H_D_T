@@ -12,8 +12,11 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 
+import com.example.app.exception.MotorJammedException;
+
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -28,6 +31,8 @@ class DispenseConsumerTest {
     @Mock
     private DispenseWorkflowService dispenseWorkflowService;
     @Mock
+    private DispenseResultPublisher dispenseResultPublisher;
+    @Mock
     private Channel channel;
 
     private DispenseConsumer dispenseConsumer;
@@ -35,7 +40,12 @@ class DispenseConsumerTest {
     @BeforeEach
     void setUp() {
         dispenseConsumer = new DispenseConsumer(
-                rabbitTemplate, messagingTemplate, dispenseWorkflowService);
+                rabbitTemplate, messagingTemplate, dispenseWorkflowService, dispenseResultPublisher) {
+            @Override
+            protected void rotateServo() {
+                // bỏ qua thời gian quay 2-3 giây trong unit test
+            }
+        };
     }
 
     @Test
@@ -75,7 +85,25 @@ class DispenseConsumerTest {
         assertDoesNotThrow(() -> dispenseConsumer.consume(request, channel, 73L));
 
         verify(messagingTemplate).convertAndSend("/topic/dispense/12", notification);
+        verify(dispenseResultPublisher).publish(notification);
         verify(channel).basicAck(73L, false);
+    }
+
+    @Test
+    void faultyMachineOrSlotIsTreatedAsMotorJamAndRetried() throws Exception {
+        DispenseRequestMessage request = new DispenseRequestMessage("ORD-5", "12", "A1", false);
+        when(dispenseWorkflowService.isCompleted("ORD-5")).thenReturn(false);
+        doThrow(new MotorJammedException("Máy đang OUT_OF_ORDER"))
+                .when(dispenseWorkflowService).assertMotorOperational(request);
+
+        assertDoesNotThrow(() -> dispenseConsumer.consume(request, channel, 75L));
+
+        verify(rabbitTemplate).convertAndSend(
+                eq(RabbitMQConfig.DIRECT_EXCHANGE),
+                eq(RabbitMQConfig.DISPENSE_ROUTING_KEY),
+                eq(request.withRetryCount(1)));
+        verify(channel).basicAck(75L, false);
+        verifyNoInteractions(messagingTemplate, dispenseResultPublisher);
     }
 
     @Test
