@@ -304,3 +304,54 @@ public class InventoryService {
         }
         slotInventory.flush();
         RestockSession completed = restockJdbc.queryForObject("""
+                UPDATE restock_sessions
+                SET status = 'COMPLETED', completed_at = :completedAt, notes = COALESCE(:notes, notes)
+                WHERE id = :id
+                RETURNING *
+                """, new MapSqlParameterSource("id", sessionId)
+                .addValue("completedAt", OffsetDateTime.now(ZoneOffset.UTC)).addValue("notes", notes), SESSION_ROW);
+        return Objects.requireNonNull(completed).withItems(items);
+    }
+
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public RestockSession cancelRestockSession(long sessionId, UUID operatorId) {
+        RestockSession session = lockRestockSession(sessionId, operatorId);
+        if (session.status() == RestockStatus.CANCELLED) return withItems(session);
+        requireInProgress(session);
+        RestockSession cancelled = restockJdbc.queryForObject("""
+                UPDATE restock_sessions SET status = 'CANCELLED' WHERE id = :id RETURNING *
+                """, Map.of("id", sessionId), SESSION_ROW);
+        return withItems(Objects.requireNonNull(cancelled));
+    }
+
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+    public List<RestockSession> getRestockHistory(long machineId) {
+        return readRestockHistory(machineId, null);
+    }
+
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+    public List<RestockSession> getRestockHistoryForOperator(long machineId, UUID operatorId) {
+        return readRestockHistory(machineId, Objects.requireNonNull(operatorId, "operatorId"));
+    }
+
+    private List<RestockSession> readRestockHistory(long machineId, UUID operatorId) {
+        var params = new MapSqlParameterSource("machineId", machineId);
+        String filter = " WHERE s.machine_id = :machineId";
+        if (operatorId != null) {
+            filter += " AND s.operator_id = :operatorId";
+            params.addValue("operatorId", operatorId);
+        }
+        List<RestockSession> sessions = restockJdbc.query("SELECT s.* FROM restock_sessions s"
+                + filter + " ORDER BY s.started_at DESC, s.id DESC", params, SESSION_ROW);
+        Map<Long, List<RestockItem>> items = restockJdbc.query(
+                "SELECT i.* FROM restock_items i JOIN restock_sessions s ON s.id = i.session_id"
+                        + filter + " ORDER BY i.id", params, ITEM_ROW).stream()
+                .collect(Collectors.groupingBy(RestockItem::sessionId));
+        return sessions.stream().map(session -> session.withItems(items.getOrDefault(session.id(), List.of()))).toList();
+    }
+
+    private RestockSession lockRestockSession(long sessionId, UUID operatorId) {
+        return restockJdbc.query("""
+                SELECT * FROM restock_sessions WHERE id = :id AND operator_id = :operatorId FOR UPDATE
+                """, Map.of("id", sessionId, "operatorId", Objects.requireNonNull(operatorId, "operatorId")), SESSION_ROW)
+                .stream().findFirst().orElseThrow(() -> new ResourceNotFoundException("Restock session", sessionId));
