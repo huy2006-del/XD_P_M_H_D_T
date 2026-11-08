@@ -22,8 +22,8 @@ import org.springframework.context.annotation.Configuration;
 public class RabbitMQConfig {
 
     public static final String DIRECT_EXCHANGE = "freshvend.direct.exchange";
-    public static final String DISPENSE_QUEUE = "order.dispense.queue";
-    public static final String DISPENSE_ROUTING_KEY = "order.dispense.key";
+    public static final String DISPENSE_QUEUE = "dispense.command.queue";
+    public static final String DISPENSE_ROUTING_KEY = "dispense.command";
     public static final String DEAD_LETTER_EXCHANGE = "freshvend.dlx.exchange";
     public static final String DEAD_LETTER_QUEUE = "order.dispense.dlq";
     public static final String DEAD_LETTER_ROUTING_KEY = "order.dispense.dlq.key";
