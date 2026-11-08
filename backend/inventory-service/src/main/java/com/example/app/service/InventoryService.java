@@ -253,3 +253,54 @@ public class InventoryService {
                 transaction -> completeRestockInInventory(sessionId, operatorId, notes)));
         boolean synced = true;
         for (long slotId : session.items().stream().map(RestockItem::slotId).distinct().sorted().toList()) {
+            try {
+                restockTransaction.executeWithoutResult(transaction -> {
+                    slotInventory.lockSlot(slotId);
+                    int currentStock = Math.toIntExact(slotInventory.sumQuantityBySlotId(slotId));
+                    machineSlots.updateStock(slotId, new MachineSlotInventoryRequest(currentStock));
+                });
+            } catch (RuntimeException e) {
+                synced = false;
+                log.warn("Chưa xác nhận đồng bộ tồn khay {} của phiên {}", slotId, sessionId, e);
+            }
+        }
+        return new RestockCompletion(session, synced ? MachineSyncStatus.SYNCED : MachineSyncStatus.UNCONFIRMED);
+    }
+
+    private RestockSession completeRestockInInventory(long sessionId, UUID operatorId, String notes) {
+        RestockSession session = lockRestockSession(sessionId, operatorId);
+        if (session.status() == RestockStatus.COMPLETED) return withItems(session);
+        requireInProgress(session);
+        List<RestockItem> items = findRestockItems(sessionId);
+        if (items.isEmpty()) throw new BusinessRuleException("Phiên nạp phải có ít nhất một mục.");
+
+        Map<Long, Long> quantityBySlot = new TreeMap<>();
+        Map<Long, Long> quantityByBatch = new TreeMap<>();
+        for (RestockItem item : items) {
+            quantityBySlot.merge(item.slotId(), (long) item.quantityAdded(), Math::addExact);
+            quantityByBatch.merge(item.batchId(), (long) item.quantityAdded(), Math::addExact);
+        }
+        quantityBySlot.keySet().forEach(slotInventory::lockSlot);
+        Map<Long, FruitBatch> lockedBatches = new HashMap<>();
+        for (long batchId : quantityByBatch.keySet()) {
+            lockedBatches.put(batchId, batches.findByIdForUpdate(batchId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Batch", batchId)));
+        }
+
+        Map<Long, MachineRestockSlot> machineSlotsById = machineSlotsById(session.machineId());
+        LocalDate today = LocalDate.now();
+        for (RestockItem item : items) {
+            FruitBatch batch = lockedBatches.get(item.batchId());
+            validateLoadBatch(item.slotId(), batch, quantityByBatch.get(item.batchId()), today);
+            validateSlotProduct(requireMachineSlot(machineSlotsById, item.slotId()).productId(), batch);
+        }
+        for (var entry : quantityBySlot.entrySet()) {
+            long slotId = entry.getKey();
+            validateCapacity(machineSlotsById.get(slotId).capacity(), slotInventory.sumQuantityBySlotId(slotId),
+                    entry.getValue());
+        }
+        for (RestockItem item : items) {
+            applyRestock(item.slotId(), lockedBatches.get(item.batchId()), item.quantityAdded());
+        }
+        slotInventory.flush();
+        RestockSession completed = restockJdbc.queryForObject("""
