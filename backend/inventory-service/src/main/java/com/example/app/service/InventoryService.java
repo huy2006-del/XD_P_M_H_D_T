@@ -355,3 +355,55 @@ public class InventoryService {
                 SELECT * FROM restock_sessions WHERE id = :id AND operator_id = :operatorId FOR UPDATE
                 """, Map.of("id", sessionId, "operatorId", Objects.requireNonNull(operatorId, "operatorId")), SESSION_ROW)
                 .stream().findFirst().orElseThrow(() -> new ResourceNotFoundException("Restock session", sessionId));
+    }
+
+    private void requireInProgress(RestockSession session) {
+        if (session.status() != RestockStatus.IN_PROGRESS) {
+            throw new BusinessRuleException("Phiên nạp đã đóng: " + session.sessionCode());
+        }
+    }
+
+    private Map<Long, MachineRestockSlot> machineSlotsById(long machineId) {
+        return machineSlots.getMachineSlots(machineId).stream()
+                .collect(Collectors.toMap(MachineRestockSlot::slotId, Function.identity()));
+    }
+
+    private MachineRestockSlot requireMachineSlot(Map<Long, MachineRestockSlot> slots, long slotId) {
+        MachineRestockSlot slot = slots.get(slotId);
+        if (slot == null) throw new BusinessRuleException("Khay " + slotId + " không thuộc máy của phiên.");
+        return slot;
+    }
+
+    private List<RestockItem> findRestockItems(long sessionId) {
+        return restockJdbc.query("SELECT * FROM restock_items WHERE session_id = :id ORDER BY id",
+                Map.of("id", sessionId), ITEM_ROW);
+    }
+
+    private RestockSession withItems(RestockSession session) {
+        return session.withItems(findRestockItems(session.id()));
+    }
+
+    /** Tồn kho của khay, lô hết hạn sớm nhất ở đầu. */
+    @Transactional(readOnly = true)
+    public List<SlotInventoryItem> getSlotInventory(Long slotId) {
+        return slotInventory.findBySlotIdAndQuantityGreaterThanOrderByBatchExpiryDateAsc(slotId, 0)
+                .stream().map(SlotInventoryItem::from).toList();
+    }
+
+    public enum RestockStatus { IN_PROGRESS, COMPLETED, CANCELLED }
+
+    public enum MachineSyncStatus { SYNCED, UNCONFIRMED }
+
+    public record RestockSession(long id, String sessionCode, long machineId, UUID operatorId, RestockStatus status,
+                                 Instant startedAt, Instant completedAt, String notes, List<RestockItem> items) {
+        private RestockSession withItems(List<RestockItem> sessionItems) {
+            return new RestockSession(id, sessionCode, machineId, operatorId, status, startedAt, completedAt,
+                    notes, List.copyOf(sessionItems));
+        }
+    }
+
+    public record RestockItem(long id, long sessionId, long slotId, long batchId, int quantityAdded,
+                              String slotCode, String productName, String batchCode) {}
+
+    public record RestockCompletion(RestockSession session, MachineSyncStatus machineSyncStatus) {}
+}
