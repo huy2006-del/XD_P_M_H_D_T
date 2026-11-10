@@ -52,3 +52,57 @@ import java.util.UUID;
 public class SlotInventoryController {
     private final InventoryService service;
 
+    public SlotInventoryController(InventoryService service) { this.service = service; }
+
+    @GetMapping("/inventory")
+    public List<SlotInventoryItem> inventory(@PathVariable Long slotId) { return service.getSlotInventory(slotId); }
+
+    @PostMapping("/batches")
+    @ResponseStatus(HttpStatus.CREATED)
+    public SlotInventoryItem load(@PathVariable Long slotId, @Valid @RequestBody LoadSlotRequest request) {
+        return service.loadToSlot(slotId, request.batchId(), request.quantity());
+    }
+
+    @PostMapping("/dispense")
+    public DispenseResultDTO dispense(@PathVariable Long slotId, @Valid @RequestBody DispenseRequest request) {
+        return service.dispenseFIFO(slotId, request.quantity());
+    }
+}
+
+@RestController
+@RequestMapping("/api/v1/restock-sessions")
+class RestockSessionController {
+    private final InventoryService service;
+
+    RestockSessionController(InventoryService service) {
+        this.service = service;
+    }
+
+    @PostMapping
+    @ResponseStatus(HttpStatus.CREATED)
+    SessionResponse create(@RequestAttribute(RestockJwtAuthentication.ACTOR_ATTRIBUTE) RestockActor actor,
+                           @Valid @RequestBody CreateSessionRequest request) {
+        return SessionResponse.from(service.createRestockSession(request.machineId(), actor.userId(), request.notes()),
+                null);
+    }
+
+    @PostMapping("/{id}/items")
+    RestockItem addItem(@RequestAttribute(RestockJwtAuthentication.ACTOR_ATTRIBUTE) RestockActor actor,
+                        @PathVariable @Positive long id, @Valid @RequestBody AddItemRequest request) {
+        return service.addRestockItem(id, actor.userId(), request.slotId(), request.batchId(), request.quantityAdded());
+    }
+
+    @PostMapping("/{id}/complete")
+    SessionResponse complete(@RequestAttribute(RestockJwtAuthentication.ACTOR_ATTRIBUTE) RestockActor actor,
+                              @PathVariable @Positive long id,
+                              @RequestBody(required = false) CompleteSessionRequest request) {
+        var completed = service.completeRestockSession(id, actor.userId(), request == null ? null : request.notes());
+        return SessionResponse.from(completed.session(), completed.machineSyncStatus());
+    }
+
+    @GetMapping("/machine/{machineId}")
+    List<SessionResponse> history(@RequestAttribute(RestockJwtAuthentication.ACTOR_ATTRIBUTE) RestockActor actor,
+                                  @PathVariable @Positive long machineId) {
+        List<RestockSession> sessions = actor.isAdmin() ? service.getRestockHistory(machineId)
+                : service.getRestockHistoryForOperator(machineId, actor.userId());
+        return sessions.stream().map(session -> SessionResponse.from(session, null)).toList();
