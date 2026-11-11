@@ -160,3 +160,58 @@ class RestockJwtAuthentication implements WebMvcConfigurer, HandlerInterceptor {
         byte[] key = secret.getBytes(StandardCharsets.UTF_8);
         if (key.length < 64) return null;
 
+        var signatures = Jwts.parser().verifyWith(Keys.hmacShaKeyFor(key)).sig();
+        for (var algorithm : Jwts.SIG.get().values()) {
+            if (!Jwts.SIG.HS512.getId().equals(algorithm.getId())) signatures.remove(algorithm);
+        }
+        return signatures.and().build();
+    }
+
+    @Override
+    public void addInterceptors(InterceptorRegistry registry) {
+        registry.addInterceptor(this);
+    }
+
+    @Override
+    public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
+        if (!(handler instanceof HandlerMethod method)
+                || !RestockSessionController.class.isAssignableFrom(method.getBeanType())) {
+            return true;
+        }
+        request.setAttribute(ACTOR_ATTRIBUTE, authenticate(request.getHeader(HttpHeaders.AUTHORIZATION)));
+        return true;
+    }
+
+    private RestockActor authenticate(String authorization) {
+        if (authorization == null || !authorization.regionMatches(true, 0, "Bearer ", 0, 7)
+                || authorization.length() == 7) {
+            throw unauthorized();
+        }
+        if (parser == null) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Restock authentication is unavailable");
+        }
+
+        Claims claims;
+        UUID userId;
+        try {
+            claims = parser.parseSignedClaims(authorization.substring(7)).getPayload();
+            String claim = claims.get("userId", String.class);
+            if (claims.getExpiration() == null || claim == null) throw unauthorized();
+            userId = UUID.fromString(claim);
+            if (!userId.toString().equalsIgnoreCase(claim)) throw unauthorized();
+        } catch (JwtException | IllegalArgumentException ignored) {
+            throw unauthorized();
+        }
+
+        Object role = claims.get("role");
+        boolean admin = "ADMIN".equals(role);
+        if (!admin && !"OPERATOR".equals(role)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Role is not permitted to access restock");
+        }
+        return new RestockActor(userId, admin);
+    }
+
+    private static ResponseStatusException unauthorized() {
+        return new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid or missing bearer token");
+    }
+}
