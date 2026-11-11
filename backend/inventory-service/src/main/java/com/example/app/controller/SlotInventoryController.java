@@ -106,3 +106,57 @@ class RestockSessionController {
         List<RestockSession> sessions = actor.isAdmin() ? service.getRestockHistory(machineId)
                 : service.getRestockHistoryForOperator(machineId, actor.userId());
         return sessions.stream().map(session -> SessionResponse.from(session, null)).toList();
+    }
+
+    @ExceptionHandler(ResponseStatusException.class)
+    ResponseEntity<Map<String, Object>> handleStatus(ResponseStatusException exception) {
+        var response = ResponseEntity.status(exception.getStatusCode());
+        if (exception.getStatusCode().value() == HttpStatus.UNAUTHORIZED.value()) {
+            response.header(HttpHeaders.WWW_AUTHENTICATE, "Bearer");
+        }
+        return response.body(Map.of("timestamp", Instant.now(), "status", exception.getStatusCode().value(),
+                "error", exception.getBody().getTitle(), "message",
+                exception.getReason() == null ? "Invalid restock request" : exception.getReason()));
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    ResponseEntity<Map<String, Object>> handleInvalidPathId() {
+        return handleStatus(new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid restock path ID"));
+    }
+
+    record CreateSessionRequest(@NotNull @Positive Long machineId, String notes) {}
+
+    record AddItemRequest(@NotNull @Positive Long slotId, @NotNull @Positive Long batchId,
+                          @NotNull @Positive Integer quantityAdded) {}
+
+    record CompleteSessionRequest(String notes) {}
+
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    record SessionResponse(long id, String sessionCode, long machineId, UUID operatorId, RestockStatus status,
+                           Instant startedAt, Instant completedAt, String notes, List<RestockItem> items,
+                           MachineSyncStatus machineSyncStatus) {
+        static SessionResponse from(RestockSession session, MachineSyncStatus machineSyncStatus) {
+            return new SessionResponse(session.id(), session.sessionCode(), session.machineId(), session.operatorId(),
+                    session.status(), session.startedAt(), session.completedAt(), session.notes(), session.items(),
+                    machineSyncStatus);
+        }
+    }
+}
+
+record RestockActor(UUID userId, boolean isAdmin) {}
+
+@Component
+class RestockJwtAuthentication implements WebMvcConfigurer, HandlerInterceptor {
+    static final String ACTOR_ATTRIBUTE = "com.example.app.restock.actor";
+    private final JwtParser parser;
+
+    RestockJwtAuthentication(Environment environment) {
+        String secret = environment.getProperty("jwt.secret");
+        parser = createParser(secret);
+    }
+
+    private static JwtParser createParser(String secret) {
+        if (secret == null || secret.isBlank()) return null;
+        byte[] key = secret.getBytes(StandardCharsets.UTF_8);
+        if (key.length < 64) return null;
+
