@@ -32,3 +32,38 @@ public class Order {
     @Enumerated(EnumType.STRING)
     @Column(name = "payment_method", nullable = false, length = 20)
     private PaymentMethod paymentMethod;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "payment_status", nullable = false, length = 20)
+    private PaymentStatus paymentStatus;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "dispense_status", nullable = false, length = 20)
+    private DispenseStatus dispenseStatus;
+
+    @Column(name = "refund_voucher_code", length = 100)
+    private String refundVoucherCode;
+
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private LocalDateTime createdAt;
+
+    @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
+    @Builder.Default
+    private List<OrderItem> items = new ArrayList<>();
+
+    @PrePersist
+    protected void onCreate() {
+        this.createdAt = LocalDateTime.now();
+        if (this.paymentStatus == null) {
+            this.paymentStatus = PaymentStatus.PENDING;
+        }
+        if (this.dispenseStatus == null) {
+            this.dispenseStatus = DispenseStatus.PENDING;
+        }
+    }
+
+    public void addItem(OrderItem item) {
+        items.add(item);
+        item.setOrder(this);
+    }
+}
