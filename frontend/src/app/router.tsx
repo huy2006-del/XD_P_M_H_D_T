@@ -14,8 +14,6 @@ import KioskSimulator from "../features/kiosk/KioskSimulator";
 import MachineSlotsPage from "../features/slots/pages/MachineSlotsPage";
 import { ColdChainMonitorPage } from "../features/coldchain/ColdChainMonitorPage";
 import { OrderManagementPage } from "../features/orders/pages/OrderManagementPage";
-// Import thêm trang Kafka Visualizer
-import { KafkaVisualizerPage } from "../features/kiosk/pages/KafkaVisualizerPage";
 
 import { SpoilageReportPage } from "../features/reports/pages/SpoilageReportPage";
 import { AuditLogsPage } from "../features/audit/pages/AuditLogsPage";
@@ -36,11 +34,6 @@ export const router = createBrowserRouter([
   {
     path: "/kiosk-simulator",
     element: <KioskSimulator />,
-  },
-  // Thêm Route mới cho Kafka Visualizer ở đây
-  {
-    path: "/kafka",
-    element: <KafkaVisualizerPage />,
   },
   {
     path: "/403",
