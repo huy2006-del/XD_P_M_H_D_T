@@ -29,7 +29,7 @@ export default function KioskSimulator() {
   const [feedbackMessage, setFeedbackMessage] = useState<string>('');
 
   // --- TÍCH HỢP IOT EDGE SIMULATOR (FE1) ---
-  const kafkaKey = selectedMachineId === 'vm-01' ? 'MC-LANDMARK-01' : `MC-${selectedMachineId.toUpperCase()}`;
+  const Kafka bridge = selectedMachineId === 'vm-01' ? 'MC-LANDMARK-01' : `MC-${selectedMachineId.toUpperCase()}`;
   const {
     isOnline,
     setIsOnline,
