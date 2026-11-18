@@ -28,7 +28,7 @@ export const ColdChainRealtimeChart: React.FC<Props> = ({ data, machineName }) =
             Biểu Đồ Biến Thiên Chuỗi Lạnh Realtime — {machineName}
           </h3>
           <p className="text-xs text-gray-500">
-            Dữ liệu tiếp nhận liên tục qua Apache Kafka Topic <span className="font-mono text-blue-600 font-bold">machine-telemetry-stream</span>
+            Dữ liệu Kafka <span className="font-mono text-blue-600 font-bold">machine-telemetry-stream</span>
           </p>
         </div>
 
