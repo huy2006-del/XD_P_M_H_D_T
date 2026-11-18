@@ -6,7 +6,6 @@ import { axiosInstance } from '../../shared/api/axiosInstance';
 import { useWebSocketSubscription } from '../../shared/realtime/useWebSocketSubscription';
 import { ColdChainStatusHeader } from './components/ColdChainStatusHeader';
 import { ColdChainRealtimeChart } from './components/ColdChainRealtimeChart';
-import { KafkaPipelineVisualizer } from './components/KafkaPipelineVisualizer';
 import { ResearchQuestion2Tab } from './components/ResearchQuestion2Tab';
 import { alarmAudio } from './utils/audioAlarm';
 import type { TelemetryPoint, ColdChainStatus } from './types';
