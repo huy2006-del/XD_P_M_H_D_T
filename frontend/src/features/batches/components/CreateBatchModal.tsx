@@ -2,13 +2,16 @@ import React, { useState } from 'react';
 import type { CreateBatchRequest } from '../types';
 import { generateLotCode } from '../../../shared/utils/dateUtils';
 
+interface ProductOption { id: number; name: string; }
+
 interface Props {
   isOpen: boolean;
   onClose: () => void;
   onSubmit: (data: CreateBatchRequest) => Promise<void>;
+  products: ProductOption[];
 }
 
-export const CreateBatchModal: React.FC<Props> = ({ isOpen, onClose, onSubmit }) => {
+export const CreateBatchModal: React.FC<Props> = ({ isOpen, onClose, onSubmit, products }) => {
   const [formData, setFormData] = useState<CreateBatchRequest>({
     productId: 0,
     batchCode: '',
@@ -18,6 +21,7 @@ export const CreateBatchModal: React.FC<Props> = ({ isOpen, onClose, onSubmit })
     unitCost: 0
   });
   const [errorMsg, setErrorMsg] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   if (!isOpen) return null;
 
@@ -26,13 +30,39 @@ export const CreateBatchModal: React.FC<Props> = ({ isOpen, onClose, onSubmit })
     setErrorMsg('');
 
     // Validation
-    if (!formData.expiryDate || new Date(formData.expiryDate) <= new Date()) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const expiry = formData.expiryDate ? new Date(`${formData.expiryDate}T00:00:00`) : null;
+    if (!expiry || expiry <= today) {
       setErrorMsg('Ngày hết hạn phải lớn hơn ngày hiện tại!');
       return;
     }
+    if (!Number.isSafeInteger(formData.productId) || formData.productId <= 0) {
+      setErrorMsg('Vui lòng chọn sản phẩm.');
+      return;
+    }
+    if (!Number.isSafeInteger(formData.quantityImported) || formData.quantityImported <= 0) {
+      setErrorMsg('Số lượng nhập phải là số nguyên lớn hơn 0.');
+      return;
+    }
+    const batchCode = formData.batchCode.trim();
+    const supplier = formData.supplier.trim();
+    if (!batchCode || batchCode.length > 50) {
+      setErrorMsg('Mã lô không được để trống và tối đa 50 ký tự.');
+      return;
+    }
+    if (supplier.length > 150) {
+      setErrorMsg('Tên nhà cung cấp tối đa 150 ký tự.');
+      return;
+    }
+    if (!Number.isFinite(formData.unitCost) || formData.unitCost < 0) {
+      setErrorMsg('Giá vốn phải là số hợp lệ không âm.');
+      return;
+    }
 
+    setSubmitting(true);
     try {
-      await onSubmit(formData);
+      await onSubmit({ ...formData, batchCode, supplier });
       onClose();
       // Reset form
       setFormData({ productId: 0, batchCode: '', supplier: '', expiryDate: '', quantityImported: 0, unitCost: 0 });
@@ -40,6 +70,8 @@ export const CreateBatchModal: React.FC<Props> = ({ isOpen, onClose, onSubmit })
       setErrorMsg(
         error instanceof Error ? error.message : 'Không thể tạo lô hàng.'
       );
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -51,12 +83,15 @@ export const CreateBatchModal: React.FC<Props> = ({ isOpen, onClose, onSubmit })
         {errorMsg && <div className="text-red-500 text-sm mb-3">{errorMsg}</div>}
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Tạm dùng input number cho Product ID, thực tế bạn nên dùng Select dropdown gọi API products */}
           <div>
-            <label className="block text-sm font-medium mb-1">Mã Sản Phẩm (Product ID)</label>
-            <input type="number" required className="w-full border p-2 rounded" 
-              value={formData.productId || ''} 
-              onChange={e => setFormData({...formData, productId: Number(e.target.value)})} />
+            <label htmlFor="batch-product" className="block text-sm font-medium mb-1">Sản phẩm</label>
+            <select id="batch-product" required className="w-full border p-2 rounded"
+              value={formData.productId || ''}
+              onChange={e => setFormData({...formData, productId: Number(e.target.value)})}>
+              <option value="">-- Chọn sản phẩm --</option>
+              {products.map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}
+            </select>
+            {products.length === 0 && <p className="mt-1 text-xs text-amber-700">Không tải được sản phẩm hoặc chưa có sản phẩm. Hãy tải danh mục trước khi nhập lô.</p>}
           </div>
 
           <div>
@@ -100,8 +135,8 @@ export const CreateBatchModal: React.FC<Props> = ({ isOpen, onClose, onSubmit })
           </div>
 
           <div className="flex justify-end gap-2 mt-6">
-            <button type="button" onClick={onClose} className="px-4 py-2 border rounded hover:bg-gray-50">Hủy</button>
-            <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Lưu Lô Hàng</button>
+            <button type="button" onClick={onClose} disabled={submitting} className="px-4 py-2 border rounded hover:bg-gray-50 disabled:opacity-50">Hủy</button>
+            <button type="submit" disabled={products.length === 0 || submitting} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50">{submitting ? 'Đang lưu...' : 'Lưu Lô Hàng'}</button>
           </div>
         </form>
       </div>

@@ -62,6 +62,7 @@ export const StepSelectSlot: React.FC<Props> = ({
             slot.capacity > 0
               ? Math.min(100, (slot.currentStock / slot.capacity) * 100)
               : 0;
+          const isLowStock = !isUnconfigured && slot.capacity > 0 && (slot.currentStock <= 2 || stockPercent <= 20);
 
           return (
             <button
@@ -84,7 +85,10 @@ export const StepSelectSlot: React.FC<Props> = ({
               <p className="truncate text-sm text-gray-700">
                 {slot.productName ?? "Chưa gán sản phẩm"}
               </p>
-              <p className="mt-1 text-xs text-gray-500">{slot.status}</p>
+              <div className="mt-1 flex items-center justify-between gap-2">
+                <p className="text-xs text-gray-500">{slot.status}</p>
+                {isLowStock && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">Tồn thấp</span>}
+              </div>
               <div className="mt-3 h-2 w-full rounded bg-gray-200">
                 <div
                   className={`h-2 rounded ${

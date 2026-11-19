@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import axios from "axios";
 import axiosInstance from "../../../shared/api/axiosInstance";
 import type { AddItemRequest, MachineSlot, FruitBatch, RestockItem } from "../types";
@@ -15,8 +15,10 @@ export function useRestockPlan() {
   const [items, setItems] = useState<RestockItem[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const submittingRef = useRef(false);
 
   function resetPlan() {
+    if (submittingRef.current) return;
     setItems([]);
     setError(null);
   }
@@ -26,6 +28,7 @@ export function useRestockPlan() {
     slot: MachineSlot,
     batch: FruitBatch
   ) {
+    if (submittingRef.current) return;
     setError(null);
     setItems((currentItems) => {
       const existingItem = currentItems.find(
@@ -56,13 +59,14 @@ export function useRestockPlan() {
   }
 
   async function completePlan(): Promise<boolean> {
-    if (isSubmitting) return false;
+    if (submittingRef.current) return false;
 
     if (items.length === 0) {
       setError("Thêm ít nhất một lô hàng trước khi xác nhận.");
       return false;
     }
 
+    submittingRef.current = true;
     setIsSubmitting(true);
     setError(null);
 
@@ -103,6 +107,7 @@ export function useRestockPlan() {
       setError(message);
       return false;
     } finally {
+      submittingRef.current = false;
       setIsSubmitting(false);
     }
   }

@@ -4,6 +4,14 @@ import axiosInstance from '../../../shared/api/axiosInstance';
 import type { PaginatedResponse } from '../../../shared/types/common.types';
 import type { FruitBatch, CreateBatchRequest } from '../types';
 
+export interface BatchQuery {
+  page?: number;
+  size?: number;
+  productId?: number;
+  expired?: boolean;
+  expiringWithinDays?: number;
+}
+
 const API_URL = '/api/v1/batches';
 
 export const useBatches = () => {
@@ -11,13 +19,25 @@ export const useBatches = () => {
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchBatches = useCallback(async () => {
+  const fetchBatches = useCallback(async (query: BatchQuery = {}) => {
     setLoading(true);
     try {
-      const response = await axiosInstance.get<PaginatedResponse<FruitBatch>>(
-        API_URL
+      const pageSize = query.size ?? 100;
+      const firstPage = await axiosInstance.get<PaginatedResponse<FruitBatch>>(
+        API_URL,
+        { params: { ...query, page: 0, size: pageSize } }
       );
-      setBatches(response.data.content);
+      const pages = await Promise.all(
+        Array.from({ length: Math.max(0, firstPage.data.totalPages - 1) }, (_, index) =>
+          axiosInstance.get<PaginatedResponse<FruitBatch>>(API_URL, {
+            params: { ...query, page: index + 1, size: pageSize },
+          })
+        )
+      );
+      const allBatches = [firstPage, ...pages].flatMap((pageResponse) =>
+        Array.isArray(pageResponse.data.content) ? pageResponse.data.content : []
+      );
+      setBatches(allBatches);
       setError(null);
     } catch (err: unknown) {
       const message = axios.isAxiosError<{ message?: string }>(err)

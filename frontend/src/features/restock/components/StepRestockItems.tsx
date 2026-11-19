@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import axiosInstance from "../../../shared/api/axiosInstance";
 import type { PaginatedResponse } from "../../../shared/types/common.types";
+import { getDaysUntilExpiry } from "../../../shared/utils/dateUtils";
 import type {
   AddItemRequest,
   FruitBatch,
@@ -42,27 +43,40 @@ export const StepRestockItems: React.FC<Props> = ({
   useEffect(() => {
     let active = true;
 
-    axiosInstance
-      .get<PaginatedResponse<FruitBatch>>("/api/v1/batches", {
-        params: {
-          productId: selectedSlot.productId,
-          expired: false,
-          page: 0,
-          size: 100,
-        },
-      })
-      .then(({ data }) => {
-        if (active) {
-          setBatches(
-            data.content.filter(
-              (batch) =>
-                !batch.expired &&
-                batch.quantityRemaining > 0 &&
-                batch.productId === selectedSlot.productId
-            )
-          );
-        }
-      })
+    async function loadBatches() {
+      const params = {
+        productId: selectedSlot.productId,
+        expired: false,
+        size: 100,
+      };
+      const firstPage = await axiosInstance.get<PaginatedResponse<FruitBatch>>(
+        "/api/v1/batches",
+        { params: { ...params, page: 0 } }
+      );
+      const pages = [firstPage.data];
+
+      for (let page = 1; page < firstPage.data.totalPages; page += 1) {
+        if (!active) return;
+        const response = await axiosInstance.get<PaginatedResponse<FruitBatch>>(
+          "/api/v1/batches",
+          { params: { ...params, page } }
+        );
+        pages.push(response.data);
+      }
+
+      const availableBatches = pages
+        .flatMap((pageData) => Array.isArray(pageData.content) ? pageData.content : [])
+        .filter(
+          (batch) =>
+            !batch.expired &&
+            getDaysUntilExpiry(batch.expiryDate) >= 0 &&
+            batch.quantityRemaining > 0 &&
+            batch.productId === selectedSlot.productId
+        );
+      if (active) setBatches(availableBatches);
+    }
+
+    loadBatches()
       .catch((requestError: unknown) => {
         if (active) setErrorMsg(getErrorMessage(requestError));
       })

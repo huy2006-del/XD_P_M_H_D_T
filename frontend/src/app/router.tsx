@@ -1,6 +1,5 @@
-
 import { lazy, Suspense } from "react";
-import { createBrowserRouter, Navigate, Link } from "react-router-dom";
+import { createBrowserRouter, Navigate } from "react-router-dom";
 
 import AdminLayout from "../layouts/adminLayout";
 import OperatorLayout from "../layouts/operatorLayout";
@@ -11,11 +10,15 @@ import RequireRole from "./guards/RequireRole";
 import LoginPage from "../features/auth/LoginPage";
 import { ProductListPage } from "../features/products/pages/ProductListPage";
 import { RestockWizardPage } from "../features/restock/pages/RestockWizardPage";
+import { BatchManagementPage } from "../features/batches/pages/BatchManagementPage";
 import { ROUTES } from "../shared/constants/routes";
 import KioskSimulator from "../features/kiosk/KioskSimulator";
 import MachineSlotsPage from "../features/slots/pages/MachineSlotsPage";
 import { ColdChainMonitorPage } from "../features/coldchain/ColdChainMonitorPage";
+import { OrderManagementPage } from "../features/orders/pages/OrderManagementPage";
 
+import { SpoilageReportPage } from "../features/reports/pages/SpoilageReportPage";
+import { AuditLogsPage } from "../features/audit/pages/AuditLogsPage";
 // FE3 - Fleet Dashboard
 const FleetDashboard = lazy(
   () => import("../features/fleet/pages/FleetDashboard.jsx")
@@ -43,8 +46,6 @@ export const router = createBrowserRouter([
       </div>
     ),
   },
-
-  // Các route yêu cầu đăng nhập
   {
     element: <ProtectedRoute />,
     children: [
@@ -65,8 +66,24 @@ export const router = createBrowserRouter([
                 element: <div>Admin Dashboard</div>,
               },
               {
+                path: "orders",
+                element: <OrderManagementPage />,
+              },
+              {
                 path: "products",
                 element: <ProductListPage />,
+              },
+              {
+                path: "batches",
+                element: <BatchManagementPage />,
+              },
+              {
+                path: "reports/spoilage",
+                element: <SpoilageReportPage />,
+              },
+              {
+                path: "audit-logs",
+                element: <AuditLogsPage />,
               },
               {
                 path: "machines",
@@ -88,7 +105,6 @@ export const router = createBrowserRouter([
           },
         ],
       },
-
       // OPERATOR
       {
         element: <RequireRole allowedRoles={["OPERATOR"]} />,
@@ -103,23 +119,15 @@ export const router = createBrowserRouter([
               },
               {
                 path: "dashboard",
-                element: (
-                  <div className="space-y-4">
-                    <h1 className="text-xl font-semibold">
-                      Operator Dashboard
-                    </h1>
-                    <Link
-                      to="/operator/restock"
-                      className="inline-flex rounded-lg bg-green-700 px-4 py-2 font-semibold text-white hover:bg-green-800"
-                    >
-                      Bắt đầu nạp hàng
-                    </Link>
-                  </div>
-                ),
+                element: <div>Operator Dashboard</div>,
               },
               {
                 path: "restock",
                 element: <RestockWizardPage />,
+              },
+              {
+                path: "batches",
+                element: <BatchManagementPage canCreate={false} />,
               },
             ],
           },
@@ -127,7 +135,6 @@ export const router = createBrowserRouter([
       },
     ],
   },
-
   {
     path: "*",
     element: (
