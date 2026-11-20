@@ -130,3 +130,47 @@ public class OrderService {
         if (reference == null || reference.isBlank()) {
             return Optional.empty();
         }
+        Optional<Order> byCode = orderRepository.findByOrderCode(reference);
+        if (byCode.isPresent() || !reference.chars().allMatch(Character::isDigit)) {
+            return byCode;
+        }
+        try {
+            return orderRepository.findById(Long.parseLong(reference));
+        } catch (NumberFormatException exception) {
+            return Optional.empty();
+        }
+    }
+
+    private String generateOrderCode() {
+        String dateStr = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
+        long count = orderRepository.countTodayOrders() + 1;
+        return String.format("ORD-%s-%04d", dateStr, count);
+    }
+
+    private OrderResponse mapToResponse(Order order) {
+        List<OrderItemResponse> itemResponses = order.getItems().stream()
+                .map(item -> OrderItemResponse.builder()
+                        .id(item.getId())
+                        .productId(item.getProductId())
+                        .slotNumber(item.getSlotNumber())
+                        .quantity(item.getQuantity())
+                        .unitPrice(item.getUnitPrice())
+                        .subtotal(item.getSubtotal())
+                        .build())
+                .collect(Collectors.toList());
+
+        return OrderResponse.builder()
+                .id(order.getId())
+                .orderCode(order.getOrderCode())
+                .machineId(order.getMachineId())
+                .totalAmount(order.getTotalAmount())
+                .paymentMethod(order.getPaymentMethod())
+                .paymentStatus(order.getPaymentStatus())
+                .dispenseStatus(order.getDispenseStatus())
+                .createdAt(order.getCreatedAt())
+                .items(itemResponses)
+                .refundVoucherCode(order.getRefundVoucherCode())
+                .qrCodeUrl(vietQRService.generateQrUrl(order.getOrderCode(), order.getTotalAmount())) // <-- 2. Sinh URL VietQR động ở đây
+                .build();
+    }
+}
