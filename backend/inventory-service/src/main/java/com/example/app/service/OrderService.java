@@ -86,3 +86,47 @@ public class OrderService {
     /**
      * Áp kết quả nhả hàng do machine-coldchain-service báo về:
      * DISPENSED → đơn COMPLETED; JAMMED → đơn kẹt hàng, lưu mã voucher hoàn tiền cho khách.
+     * Chỉ chuyển từ PENDING nên message trùng lặp không ghi đè hay xử lý lại.
+     *
+     * @return true nếu đơn vừa chuyển sang COMPLETED trong lần gọi này (caller cần trừ kho khay)
+     */
+    @Transactional
+    public boolean applyDispenseResult(DispenseResultEvent event) {
+        Optional<Order> found = findOrderByReference(event.orderId());
+        if (found.isEmpty()) {
+            log.warn("[DISPENSE RESULT] Không tìm thấy đơn '{}', bỏ qua kết quả {}.",
+                    event.orderId(), event.status());
+            return false;
+        }
+
+        DispenseStatus target;
+        if ("DISPENSED".equals(event.status()) || "COMPLETED".equals(event.status())) {
+            target = DispenseStatus.COMPLETED;
+        } else if ("JAMMED".equals(event.status())) {
+            target = DispenseStatus.JAMMED;
+        } else {
+            log.warn("[DISPENSE RESULT] Trạng thái không hợp lệ '{}' cho đơn {}.", event.status(), event.orderId());
+            return false;
+        }
+
+        Order order = found.get();
+        if (order.getDispenseStatus() != DispenseStatus.PENDING) {
+            log.info("[DISPENSE RESULT] Đơn {} đang {}, bỏ qua kết quả {} (đã xử lý hoặc trùng lặp).",
+                    order.getOrderCode(), order.getDispenseStatus(), target);
+            return false;
+        }
+
+        order.setDispenseStatus(target);
+        if (target == DispenseStatus.JAMMED && event.refundVoucherCode() != null) {
+            order.setRefundVoucherCode(event.refundVoucherCode());
+        }
+        orderRepository.save(order);
+        log.info("[DISPENSE RESULT] Đơn {} → {}{}", order.getOrderCode(), target,
+                order.getRefundVoucherCode() != null ? ", voucher=" + order.getRefundVoucherCode() : "");
+        return target == DispenseStatus.COMPLETED;
+    }
+
+    private Optional<Order> findOrderByReference(String reference) {
+        if (reference == null || reference.isBlank()) {
+            return Optional.empty();
+        }
