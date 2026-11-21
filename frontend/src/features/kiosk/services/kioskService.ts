@@ -1,37 +1,38 @@
-import axios from 'axios';
-import type { MachineSlot } from '../../slots/slotTypes';
-
-export interface MachineStatusResponse {
-  id: number;
-  status: 'ACTIVE' | 'OUT_OF_ORDER' | 'MAINTENANCE';
-  temperature?: number;
-}
+import { publicAxios } from '../../../shared/api/axiosInstance';
+import type { 
+  MachineSlotDTO, 
+  MachineStatusDTO, 
+  CreateOrderRequest, 
+  OrderResponse 
+} from '../types/kiosk';
 
 export const kioskService = {
-  // 1. Lấy trạng thái máy (Nhiệm vụ 3.5)
-  getMachineStatus: async (machineId: number): Promise<MachineStatusResponse> => {
-    const response = await axios.get(`/api/v1/machines/${machineId}/status`);
+  // Lấy trạng thái máy thời gian thực
+  getMachineStatus: async (machineId: number): Promise<MachineStatusDTO> => {
+    const response = await publicAxios.get(`/api/v1/machines/${machineId}/status`);
     return response.data;
   },
 
-  // 2. Lấy danh sách khay hàng thực tế (Nhiệm vụ 3.6)
-  getMachineSlots: async (machineId: number): Promise<MachineSlot[]> => {
-    const response = await axios.get(`/api/v1/machines/${machineId}/slots`);
+  // Lấy danh sách tồn kho thực tế
+  getMachineSlots: async (machineId: number): Promise<MachineSlotDTO[]> => {
+    const response = await publicAxios.get(`/api/v1/machines/${machineId}/slots`);
     return response.data;
   },
 
-  // 3. Kiểm tra trạng thái thanh toán (Nhiệm vụ 5.9)
-  checkPaymentStatus: async (orderId: string): Promise<{ status: 'PENDING' | 'PAID' | 'FAILED' }> => {
-    // Sử dụng orderId để in log debug nhằm tránh lỗi ts(6133) unused variable
-    console.log(`Checking payment status for order: ${orderId}`);
+  // Tạo đơn hàng (Bắt đầu luồng giao dịch)
+  createOrder: async (payload: CreateOrderRequest): Promise<OrderResponse> => {
+    const response = await publicAxios.post('/api/v1/orders', payload);
+    return response.data;
+  },
 
-    // GIẢ LẬP DEMO FE: Tự động báo PAID sau khi Polling
-    return new Promise((resolve) => {
-      setTimeout(() => resolve({ status: 'PAID' }), 5000);
-    });
+  // Hủy đơn hàng khi timeout
+  cancelOrder: async (orderId: string): Promise<void> => {
+    await publicAxios.put(`/api/v1/orders/${orderId}/cancel`);
+  },
 
-    // KHI CÓ API THẬT TỪ BACKEND, BỎ COMMENT ĐOẠN DƯỚI:
-    // const response = await axios.get(`/api/v1/orders/${orderId}/payment-status`);
-    // return response.data;
+  // Polling dự phòng khi rớt WebSocket
+  getOrderStatus: async (orderId: string): Promise<{ status: string }> => {
+    const response = await publicAxios.get(`/api/v1/orders/${orderId}/status`);
+    return response.data;
   }
 };
