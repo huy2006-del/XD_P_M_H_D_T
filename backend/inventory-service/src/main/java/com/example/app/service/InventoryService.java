@@ -12,11 +12,17 @@ import com.example.app.exception.InsufficientStockException;
 import com.example.app.exception.BusinessRuleException;
 import com.example.app.exception.ResourceNotFoundException;
 import com.example.app.client.MachineSlotClient;
+import com.example.app.client.AuditLogClient;
+import com.example.app.dto.AuditLogEvent;
 import com.example.app.repository.FruitBatchRepository;
 import com.example.app.repository.SlotBatchInventoryRepository;
 import com.example.app.repository.StockMovementRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.transaction.annotation.Transactional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -25,17 +31,21 @@ import java.util.List;
 
 @Service
 public class InventoryService {
+    private static final Logger log = LoggerFactory.getLogger(InventoryService.class);
     private final SlotBatchInventoryRepository slotInventory;
     private final FruitBatchRepository batches;
     private final StockMovementRepository movements;
     private final MachineSlotClient machineSlots;
+    private final AuditLogClient auditLogClient;
 
     public InventoryService(SlotBatchInventoryRepository slotInventory, FruitBatchRepository batches,
-                            StockMovementRepository movements, MachineSlotClient machineSlots) {
+                            StockMovementRepository movements, MachineSlotClient machineSlots,
+                            AuditLogClient auditLogClient) {
         this.slotInventory = slotInventory;
         this.batches = batches;
         this.movements = movements;
         this.machineSlots = machineSlots;
+        this.auditLogClient = auditLogClient;
     }
 
     /**
@@ -113,7 +123,9 @@ public class InventoryService {
         slotInventory.save(row);
         movements.save(new StockMovement(slotId, batch, MovementType.LOAD, quantity));
         machineSlots.updateStock(slotId, new MachineSlotInventoryRequest((int) stockAfterLoad));
-        return SlotInventoryItem.from(row);
+        SlotInventoryItem loadedItem = SlotInventoryItem.from(row);
+        recordRestockAudit(slotId, batch, quantity);
+        return loadedItem;
     }
 
     /** Tồn kho của khay, lô hết hạn sớm nhất ở đầu. */
@@ -121,5 +133,22 @@ public class InventoryService {
     public List<SlotInventoryItem> getSlotInventory(Long slotId) {
         return slotInventory.findBySlotIdAndQuantityGreaterThanOrderByBatchExpiryDateAsc(slotId, 0)
                 .stream().map(SlotInventoryItem::from).toList();
+    }
+
+    private void recordRestockAudit(Long slotId, FruitBatch batch, int quantity) {
+        try {
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            String username = authentication != null && authentication.isAuthenticated()
+                    && authentication.getName() != null && !authentication.getName().isBlank()
+                    && !"anonymousUser".equals(authentication.getName())
+                    ? authentication.getName() : "operator_admin";
+            AuditLogEvent event = new AuditLogEvent("RESTOCK_COMPLETED", null, username,
+                    "Nạp " + quantity + " sản phẩm từ lô " + batch.getBatchCode()
+                            + " vào khay ID " + slotId);
+            auditLogClient.recordAuditLog(event);
+        } catch (RuntimeException exception) {
+            log.warn("Không ghi được audit RESTOCK_COMPLETED qua identity-service; nghiệp vụ chính vẫn tiếp tục.",
+                    exception);
+        }
     }
 }

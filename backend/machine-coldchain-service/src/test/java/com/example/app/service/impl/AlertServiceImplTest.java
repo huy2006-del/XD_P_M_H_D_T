@@ -1,5 +1,6 @@
 package com.example.app.service.impl;
 
+import com.example.app.client.AuditLogClient;
 import com.example.app.entity.Alert;
 import com.example.app.entity.AlertSeverity;
 import com.example.app.entity.AlertStatus;
@@ -36,6 +37,8 @@ class AlertServiceImplTest {
     @Mock
     private SimpMessagingTemplate messagingTemplate;
     @Mock
+    private AuditLogClient auditLogClient;
+    @Mock
     private VendingMachine machine;
 
     private AlertServiceImpl alertService;
@@ -43,7 +46,8 @@ class AlertServiceImplTest {
 
     @BeforeEach
     void setUp() {
-        alertService = new AlertServiceImpl(alertRepository, vendingMachineRepository, messagingTemplate);
+        alertService = new AlertServiceImpl(
+                alertRepository, vendingMachineRepository, messagingTemplate, auditLogClient);
         when(machine.getId()).thenReturn(41L);
         when(machine.getSerialNumber()).thenReturn("FV-HCM-041");
         when(machine.getTempMinThreshold()).thenReturn(new BigDecimal("2.00"));

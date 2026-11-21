@@ -5,7 +5,9 @@ import com.example.app.dto.request.MachineSlotStatusRequest;
 import com.example.app.dto.response.MachineSlotResponse;
 import com.example.app.client.ProductClient;
 import com.example.app.client.InventoryHistoryClient;
+import com.example.app.client.AuditLogClient;
 import com.example.app.dto.ProductDTO;
+import com.example.app.service.AuditLogSupport;
 import com.example.app.entity.MachineSlot;
 import com.example.app.entity.VendingMachine;
 import com.example.app.exception.BusinessRuleException;
@@ -14,6 +16,7 @@ import com.example.app.repository.MachineSlotRepository;
 import com.example.app.repository.VendingMachineRepository;
 import com.example.app.service.MachineSlotService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,12 +24,14 @@ import java.util.List;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class MachineSlotServiceImpl implements MachineSlotService {
 
     private final MachineSlotRepository machineSlotRepository;
     private final VendingMachineRepository vendingMachineRepository;
     private final ProductClient productClient;
     private final InventoryHistoryClient inventoryHistoryClient;
+    private final AuditLogClient auditLogClient;
 
     @Override
     @Transactional(readOnly = true)
@@ -82,7 +87,11 @@ public class MachineSlotServiceImpl implements MachineSlotService {
                 product == null ? null : Long.valueOf(product.id()),
                 capacity
         );
-        return toResponse(machineSlotRepository.save(slot));
+        MachineSlot savedSlot = machineSlotRepository.save(slot);
+        MachineSlotResponse response = toResponse(savedSlot);
+        recordAudit("SLOT_UPDATED", "Cập nhật khay " + savedSlot.getSlotCode()
+                + ": sức chứa=" + savedSlot.getCapacity() + ", productId=" + savedSlot.getProductId());
+        return response;
     }
 
     @Override
@@ -131,5 +140,14 @@ public class MachineSlotServiceImpl implements MachineSlotService {
     private MachineSlotResponse toResponse(MachineSlot slot) {
         ProductDTO product = slot.getProductId() == null ? null : productClient.getById(slot.getProductId());
         return MachineSlotResponse.from(slot, product);
+    }
+
+    private void recordAudit(String action, String details) {
+        try {
+            auditLogClient.recordAuditLog(AuditLogSupport.event(action, details, null));
+        } catch (RuntimeException exception) {
+            log.warn("Không ghi được audit action={} qua identity-service; nghiệp vụ chính vẫn tiếp tục.",
+                    action, exception);
+        }
     }
 }

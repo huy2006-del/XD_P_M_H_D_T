@@ -1,5 +1,7 @@
 package com.example.app.service.impl;
 
+import com.example.app.client.AuditLogClient;
+import com.example.app.dto.event.AuditLogEvent;
 import com.example.app.dto.request.MachineRequest;
 import com.example.app.dto.response.MachineResponse;
 import com.example.app.entity.Location;
@@ -12,7 +14,9 @@ import com.example.app.repository.LocationRepository;
 import com.example.app.repository.TemperatureLogRepository;
 import com.example.app.repository.VendingMachineRepository;
 import com.example.app.service.VendingMachineService;
+import com.example.app.service.AuditLogSupport;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,11 +25,13 @@ import java.util.List;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class VendingMachineServiceImpl implements VendingMachineService {
 
     private final VendingMachineRepository machineRepository;
     private final LocationRepository locationRepository;
     private final TemperatureLogRepository temperatureLogRepository;
+    private final AuditLogClient auditLogClient;
 
     @Override
     @Transactional(readOnly = true)
@@ -83,6 +89,8 @@ public class VendingMachineServiceImpl implements VendingMachineService {
                 request.tempMaxThreshold(), machine.getTempMaxThreshold()
         );
         validateThresholds(minThreshold, maxThreshold);
+        boolean thresholdsChanged = !minThreshold.equals(machine.getTempMinThreshold())
+                || !maxThreshold.equals(machine.getTempMaxThreshold());
         machine.update(
                 request.serialNumber(),
                 request.name(),
@@ -92,7 +100,21 @@ public class VendingMachineServiceImpl implements VendingMachineService {
                 minThreshold,
                 maxThreshold
         );
-        return toResponse(machineRepository.save(machine));
+        VendingMachine savedMachine = machineRepository.save(machine);
+        MachineResponse response = toResponse(savedMachine);
+        if (thresholdsChanged) {
+            String details = "Cập nhật ngưỡng nhiệt máy " + savedMachine.getSerialNumber()
+                    + ": Min=" + savedMachine.getTempMinThreshold() + "°C, Max="
+                    + savedMachine.getTempMaxThreshold() + "°C";
+            try {
+                AuditLogEvent event = AuditLogSupport.event("THRESHOLD_UPDATED", details, null);
+                auditLogClient.recordAuditLog(event);
+            } catch (RuntimeException exception) {
+                log.warn("Không ghi được audit THRESHOLD_UPDATED qua identity-service; nghiệp vụ chính vẫn tiếp tục.",
+                        exception);
+            }
+        }
+        return response;
     }
 
     @Override

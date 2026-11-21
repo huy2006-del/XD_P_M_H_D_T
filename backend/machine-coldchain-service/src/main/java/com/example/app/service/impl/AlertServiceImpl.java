@@ -1,5 +1,7 @@
 package com.example.app.service.impl;
 
+import com.example.app.client.AuditLogClient;
+import com.example.app.dto.event.AuditLogEvent;
 import com.example.app.dto.response.AlertResponse;
 import com.example.app.entity.Alert;
 import com.example.app.entity.AlertSeverity;
@@ -12,7 +14,9 @@ import com.example.app.exception.ResourceNotFoundException;
 import com.example.app.repository.AlertRepository;
 import com.example.app.repository.VendingMachineRepository;
 import com.example.app.service.AlertService;
+import com.example.app.service.AuditLogSupport;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -27,6 +31,7 @@ import java.util.concurrent.ConcurrentMap;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class AlertServiceImpl implements AlertService {
 
     private static final int CRITICAL_VIOLATION_COUNT = 3;
@@ -34,6 +39,7 @@ public class AlertServiceImpl implements AlertService {
     private final AlertRepository alertRepository;
     private final VendingMachineRepository vendingMachineRepository;
     private final SimpMessagingTemplate messagingTemplate;
+    private final AuditLogClient auditLogClient;
     private final ConcurrentMap<String, Integer> consecutiveViolations = new ConcurrentHashMap<>();
 
     @Override
@@ -84,6 +90,14 @@ public class AlertServiceImpl implements AlertService {
         }
         AlertResponse response = AlertResponse.from(alertRepository.save(alert));
         messagingTemplate.convertAndSend("/topic/alerts", response);
+        try {
+            AuditLogEvent event = AuditLogSupport.event("ALERT_RESOLVED",
+                    "Giải quyết cảnh báo #" + alertId + ": " + resolutionNote.trim(), resolvedBy);
+            auditLogClient.recordAuditLog(event);
+        } catch (RuntimeException exception) {
+            log.warn("Không ghi được audit ALERT_RESOLVED qua identity-service; nghiệp vụ chính vẫn tiếp tục.",
+                    exception);
+        }
         return response;
     }
 

@@ -3,6 +3,7 @@ import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { LayoutGrid, List, Plus, Settings2, RefreshCw } from 'lucide-react';
 
 import { axiosInstance } from '../../../shared/api/axiosInstance';
+import { toast } from 'sonner';
 
 import QuickStats from '../components/QuickStats';
 import MachineTable from '../components/MachineTable';
@@ -27,9 +28,12 @@ function mapMachineFromApi(machine) {
       ? new Date(machine.lastPingAt).toLocaleString('vi-VN')
       : 'Chưa có dữ liệu',
 
-    // Giữ ID để sử dụng khi tích hợp chức năng CRUD
+    // Keep service-owned IDs for create/update requests.
     locationId: machine.location?.id ?? null,
     operatorId: machine.operator?.id ?? null,
+    model: machine.model ?? '',
+    tempMinThreshold: machine.tempMinThreshold ?? 2,
+    tempMaxThreshold: machine.tempMaxThreshold ?? 8,
     currentTemp: machine.currentTemp ?? null,
   };
 }
@@ -41,14 +45,20 @@ export default function FleetDashboard() {
   const [editingMachine, setEditingMachine] = useState(null);
 
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [saveError, setSaveError] = useState('');
+  const [locations, setLocations] = useState([]);
 
   // Form State: tạm giữ cấu trúc hiện tại
   const [formData, setFormData] = useState({
     serial: '',
     name: '',
-    location: null,
-    operator: null,
+    model: '',
+    locationId: '',
+    operatorId: '1',
+    tempMinThreshold: '2',
+    tempMaxThreshold: '8',
     status: 'ONLINE',
   });
 
@@ -59,12 +69,17 @@ export default function FleetDashboard() {
       setError('');
 
       const response = await axiosInstance.get('/api/v1/machines');
+      const locationResponse = await axiosInstance.get('/api/v1/locations');
 
       if (!Array.isArray(response.data)) {
         throw new Error('Dữ liệu Machine API không đúng định dạng danh sách.');
       }
 
       setMachines(response.data.map(mapMachineFromApi));
+      if (!Array.isArray(locationResponse.data)) {
+        throw new Error('Dữ liệu Location API không đúng định dạng danh sách.');
+      }
+      setLocations(locationResponse.data);
     } catch (err) {
       console.error('Fetch machines failed:', err);
 
@@ -99,34 +114,95 @@ export default function FleetDashboard() {
   const handleOpenModal = (machine = null) => {
     if (machine) {
       setEditingMachine(machine);
-      setFormData({ ...machine });
+      setFormData({
+        ...machine,
+        locationId: machine.locationId == null ? '' : String(machine.locationId),
+        operatorId: machine.operatorId == null ? '1' : String(machine.operatorId),
+        tempMinThreshold: String(machine.tempMinThreshold ?? 2),
+        tempMaxThreshold: String(machine.tempMaxThreshold ?? 8),
+      });
     } else {
       setEditingMachine(null);
       setFormData({
         serial: '',
         name: '',
-        location: null,
-        operator: null,
+        model: '',
+        locationId: locations[0]?.id ? String(locations[0].id) : '',
+        operatorId: '1',
+        tempMinThreshold: '2',
+        tempMaxThreshold: '8',
         status: 'ONLINE',
       });
     }
 
+    setSaveError('');
     setIsModalOpen(true);
   };
 
   const handleCloseModal = () => {
     setIsModalOpen(false);
     setEditingMachine(null);
+    setSaveError('');
   };
 
-  // Chưa kết nối POST/PUT API.
-  // Không tự cập nhật state để tránh tạo dữ liệu giả.
-  const handleSave = (e) => {
+  const handleSave = async (e) => {
     e.preventDefault();
+    const locationId = Number(formData.locationId);
+    const operatorId = Number(formData.operatorId);
+    const minThreshold = formData.tempMinThreshold === '' ? null : Number(formData.tempMinThreshold);
+    const maxThreshold = formData.tempMaxThreshold === '' ? null : Number(formData.tempMaxThreshold);
+    if (!formData.serial.trim() || !formData.name.trim()) {
+      setSaveError('Serial Number và tên máy là bắt buộc.');
+      return;
+    }
+    if (!Number.isInteger(locationId) || locationId <= 0) {
+      setSaveError('Vui lòng chọn vị trí hợp lệ cho máy.');
+      return;
+    }
+    if (!Number.isInteger(operatorId) || operatorId <= 0) {
+      setSaveError('Operator ID phải là số nguyên dương.');
+      return;
+    }
+    if ((minThreshold !== null && !Number.isFinite(minThreshold)) ||
+        (maxThreshold !== null && !Number.isFinite(maxThreshold)) ||
+        (minThreshold !== null && (minThreshold < -50 || minThreshold > 50)) ||
+        (maxThreshold !== null && (maxThreshold < -50 || maxThreshold > 50)) ||
+        (minThreshold !== null && maxThreshold !== null && minThreshold >= maxThreshold)) {
+      setSaveError('Ngưỡng nhiệt độ phải từ -50°C đến 50°C và tối thiểu phải nhỏ hơn tối đa.');
+      return;
+    }
 
-    alert(
-      'Chức năng thêm/sửa máy đang chờ tích hợp POST/PUT Machine API.'
-    );
+    const request = {
+      serialNumber: formData.serial.trim(),
+      name: formData.name.trim(),
+      model: formData.model.trim() || null,
+      locationId,
+      operatorId,
+      tempMinThreshold: minThreshold,
+      tempMaxThreshold: maxThreshold,
+    };
+
+    try {
+      setSaving(true);
+      setSaveError('');
+      if (editingMachine) {
+        await axiosInstance.put(`/api/v1/machines/${editingMachine.id}`, request);
+        if (formData.status !== editingMachine.status) {
+          await axiosInstance.patch(`/api/v1/machines/${editingMachine.id}/status`, {
+            status: formData.status,
+          });
+        }
+      } else {
+        await axiosInstance.post('/api/v1/machines', request);
+      }
+      await fetchMachines();
+      handleCloseModal();
+      toast.success(editingMachine ? 'Đã cập nhật thông tin máy.' : 'Đã thêm máy mới.');
+    } catch (err) {
+      setSaveError(err.response?.data?.message || err.message || 'Không thể lưu thông tin máy.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleFormChange = (e) => {
@@ -262,6 +338,9 @@ export default function FleetDashboard() {
         editingMachine={editingMachine}
         formData={formData}
         handleFormChange={handleFormChange}
+        locations={locations}
+        saving={saving}
+        error={saveError}
       />
     </div>
   );
