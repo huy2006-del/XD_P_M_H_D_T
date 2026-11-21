@@ -1,448 +1,278 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { 
-  Building2, 
-  ShoppingCart, 
-  RefreshCw, 
-  Sparkles,
-  Maximize,
-  Minimize,
-  PackageCheck,
-  Wrench
-} from 'lucide-react';
-import type { ProductSlot } from '../../types/kiosk';
-import { MOCK_MACHINES, MOCK_INVENTORY_DATA } from '../../constants/kioskMockData';
-import { KioskDetailModal } from './components/KioskDetailModal';
-import { FoodSafetyOverlay } from './components/FoodSafetyOverlay';
-import { useIoTSimulator } from './hooks/useIoTSimulator';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { ShoppingCart, AlertTriangle, X, CheckCircle, RefreshCw } from 'lucide-react';
+import { Client } from '@stomp/stompjs';
+import { kioskService } from './services/kioskService';
+import type { 
+  MachineSlotDTO, 
+  OrderResponse, 
+  MachineStatusDTO, 
+  CreateOrderRequest 
+} from './types/kiosk';
+
+const MACHINE_ID = 1;
 
 export default function KioskSimulator() {
-  // State quản lý máy & kho hàng
-  const [selectedMachineId, setSelectedMachineId] = useState<string>('vm-01');
-  const [slots, setSlots] = useState<ProductSlot[]>([]);
-  const [loading, setLoading] = useState<boolean>(false);
-  const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
+  // --- State Quản lý Dữ liệu ---
+  const [machineStatus, setMachineStatus] = useState<MachineStatusDTO | null>(null);
+  const [slots, setSlots] = useState<MachineSlotDTO[]>([]);
+  
+  // Bỏ <boolean> để tránh lỗi TSX Parsing (TS tự hiểu là boolean)
+  const [loading, setLoading] = useState(true);
+  
+  // --- State Giỏ hàng ---
+  const [cart, setCart] = useState(new Map()); 
+  const [isProcessing, setIsProcessing] = useState(false);
 
-  // State Modal & Mua hàng FIFO
-  const [activeSlot, setActiveSlot] = useState<ProductSlot | null>(null);
-  const [isProcessing, setIsProcessing] = useState<boolean>(false);
-  const [txStatus, setTxStatus] = useState<'IDLE' | 'SUCCESS' | 'ERROR'>('IDLE');
-  const [feedbackMessage, setFeedbackMessage] = useState<string>('');
+  // --- State Đơn hàng & Thanh toán ---
+  const [currentOrder, setCurrentOrder] = useState<OrderResponse | null>(null);
+  const [paymentStatus, setPaymentStatus] = useState<'IDLE' | 'PENDING' | 'SUCCESS' | 'FAILED' | 'EXPIRED'>('IDLE');
+  
+  // Timer đếm ngược QR
+  const [timeLeft, setTimeLeft] = useState<number>(300);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // --- TÍCH HỢP IOT EDGE SIMULATOR (FE1) ---
-  const Kafka bridge = selectedMachineId === 'vm-01' ? 'MC-LANDMARK-01' : `MC-${selectedMachineId.toUpperCase()}`;
-  const {
-    isOnline,
-    setIsOnline,
-    temperature,
-    setTemperature,
-    motorActive,
-    offlineBuffer,
-    logs,
-  } = useIoTSimulator(kafkaKey);
-
-  const [showSecretPanel, setShowSecretPanel] = useState<boolean>(true);
-
-  // Lấy dữ liệu khay hàng theo máy
-  const fetchMachineInventory = useCallback(async (machineId: string) => {
+  // 1. Tải dữ liệu ban đầu
+  const fetchMachineData = useCallback(async () => {
     setLoading(true);
     try {
-      await new Promise((res) => setTimeout(res, 350));
-      setSlots(MOCK_INVENTORY_DATA[machineId] || []);
+      const [statusData, slotsData] = await Promise.all([
+        kioskService.getMachineStatus(MACHINE_ID),
+        kioskService.getMachineSlots(MACHINE_ID)
+      ]);
+      setMachineStatus(statusData);
+      setSlots(slotsData);
     } catch (error: unknown) {
-      console.error('Lỗi khi tải danh sách khay:', error);
+      console.error('Lỗi kết nối Server:', error);
+      setMachineStatus({ machineId: MACHINE_ID, status: 'OFFLINE', temperature: 0 });
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchMachineInventory(selectedMachineId);
-  }, [selectedMachineId, fetchMachineInventory]);
+    fetchMachineData();
+  }, [fetchMachineData]);
 
-  // Xử lý Chế độ Toàn màn hình (Mô phỏng Kiosk thực tế)
-  const toggleFullscreen = () => {
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().catch(() => {});
-      setIsFullscreen(true);
-    } else {
-      document.exitFullscreen().catch(() => {});
-      setIsFullscreen(false);
-    }
+  // 2. Nghiệp vụ Giỏ hàng (Chặn vượt tồn)
+  const handleAddToCart = (slot: MachineSlotDTO) => {
+    if (slot.currentStock <= 0 || slot.status === 'OUT_OF_STOCK') return;
+    
+    setCart((prev: Map<number, number>) => {
+      const newCart = new Map(prev);
+      const currentQty = newCart.get(slot.slotId) ?? 0;
+      if (currentQty < slot.currentStock) {
+        newCart.set(slot.slotId, currentQty + 1);
+      }
+      return newCart;
+    });
   };
 
-  // Gọi API Trừ kho FIFO (Mô phỏng kết nối với Backend 2)
-  const handleConfirmPurchase = async () => {
-    if (!activeSlot) return;
+  // Dùng Spread Operator [...] thay cho Array.from để TS nhận chuẩn kiểu [number, number]
+  const totalAmount = [...cart.entries()].reduce((sum, [slotId, qty]) => {
+    const slot = slots.find(s => s.slotId === slotId);
+    return sum + (slot ? slot.price * qty : 0);
+  }, 0);
 
+  // 3. Nghiệp vụ Tạo Đơn & Chờ Thanh Toán
+  const handleCheckout = async () => {
+    if (cart.size === 0 || machineStatus?.status !== 'ONLINE') return;
+    
     setIsProcessing(true);
-    setTxStatus('IDLE');
-
     try {
-      const payload = {
-        machineId: selectedMachineId,
-        slotId: activeSlot.slotId,
-        slotCode: activeSlot.slotCode,
-        idempotencyKey: crypto.randomUUID(),
-        timestamp: new Date().toISOString()
+      const payload: CreateOrderRequest = {
+        machineId: MACHINE_ID,
+        items: [...cart.entries()].map(([slotId, quantity]) => ({ slotId, quantity }))
       };
-
-      console.log('[Kiosk API Request -> BE 2 FIFO Deduct]:', payload);
-
-      await new Promise((res) => setTimeout(res, 1200));
-
-      setSlots((prevSlots) =>
-        prevSlots.map((s) =>
-          s.slotId === activeSlot.slotId
-            ? { ...s, stock: Math.max(0, s.stock - 1) }
-            : s
-        )
-      );
-
-      setTxStatus('SUCCESS');
-      setFeedbackMessage(
-        `Đã xuất hàng thành công tại khay ${activeSlot.slotCode}! Hệ thống đã ưu tiên trừ lô hàng theo thuật toán FIFO (${activeSlot.batchInfo}).`
-      );
-    } catch {
-      setTxStatus('ERROR');
-      setFeedbackMessage('Lỗi giao dịch hoặc khay đã hết hàng trong kho. Vui lòng chọn sản phẩm khác!');
+      
+      const order = await kioskService.createOrder(payload);
+      setCurrentOrder(order);
+      setPaymentStatus('PENDING');
+      setTimeLeft(300);
+    } catch (error: unknown) {
+      console.error('Lỗi khi tạo đơn hàng:', error);
+      alert('Không thể tạo đơn hàng. Vui lòng thử lại.');
     } finally {
       setIsProcessing(false);
     }
   };
 
-  const handleCloseModal = () => {
-    setActiveSlot(null);
-    setTxStatus('IDLE');
-    setFeedbackMessage('');
-  };
+  // 4. Lắng nghe WebSocket & Polling Fallback
+  useEffect(() => {
+    if (!currentOrder || paymentStatus !== 'PENDING') return;
 
-  const currentMachine = MOCK_MACHINES.find((m) => m.id === selectedMachineId);
+    // A. Thiết lập WebSocket
+    const client = new Client({
+      brokerURL: 'ws://localhost:8080/ws-endpoint',
+      onConnect: () => {
+        client.subscribe(`/topic/orders/${currentOrder.orderId}`, (message) => {
+          const body = JSON.parse(message.body);
+          if (body.status === 'PAID') {
+            setPaymentStatus('SUCCESS');
+          } else if (body.status === 'FAILED' || body.status === 'CANCELLED') {
+            setPaymentStatus('FAILED');
+          }
+        });
+      }
+    });
+    client.activate();
 
-  // Điều kiện khóa an toàn thực phẩm: Khi Watchdog đã ngắt motor (mất mạng + nhiệt độ > 10°C sau 3s)
-  const isSafetyLocked = !motorActive;
+    // B. Đếm ngược & Timeout
+    timerRef.current = setInterval(() => {
+      setTimeLeft(prev => {
+        if (prev <= 1) {
+          kioskService.cancelOrder(currentOrder.orderId).catch(err => console.warn('Hủy đơn thất bại:', err));
+          setPaymentStatus('EXPIRED');
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
 
-  return (
-    <div className="flex h-screen bg-slate-950 text-white font-sans select-none overflow-hidden">
-      
-      {/* ========================================================= */}
-      {/* 1. MÀN HÌNH KIOSK PUBLIC (Bên trái)                       */}
-      {/* ========================================================= */}
-      <div className="flex-1 flex flex-col justify-between overflow-y-auto relative">
-        
-        {/* Lớp phủ khóa Kiosk khi Watchdog ngắt motor vì nhiệt độ cao */}
-        <FoodSafetyOverlay isLocked={isSafetyLocked} />
+    // C. Polling dự phòng (3s/lần nếu rớt WS)
+    const pollingTimer = setInterval(async () => {
+      try {
+        const { status } = await kioskService.getOrderStatus(currentOrder.orderId);
+        if (status === 'PAID') setPaymentStatus('SUCCESS');
+        if (status === 'FAILED') setPaymentStatus('FAILED');
+      } catch (err: unknown) {
+        console.warn('Lỗi polling trạng thái đơn hàng:', err);
+      }
+    }, 3000);
 
-        {/* --- KIOSK HEADER --- */}
-        <header className="bg-slate-900/90 border-b border-slate-800 p-4 sticky top-0 z-20 backdrop-blur-md flex flex-wrap justify-between items-center gap-4 shadow-xl">
-          
-          {/* Branding */}
-          <div className="flex items-center space-x-3">
-            <div className="bg-emerald-500/20 border border-emerald-500/40 p-2.5 rounded-2xl shadow-inner">
-              <Sparkles className="w-7 h-7 text-emerald-400" />
-            </div>
-            <div>
-              <h1 className="text-xl md:text-2xl font-black tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-teal-200">
-                FRESH KIOSK 24/7
-              </h1>
-              <p className="text-xs text-slate-400 font-medium">Trạm Trái Cây Tươi Tự Động</p>
-            </div>
-          </div>
+    return () => {
+      client.deactivate();
+      if (timerRef.current) clearInterval(timerRef.current);
+      clearInterval(pollingTimer);
+    };
+  }, [currentOrder, paymentStatus]);
 
-          {/* Dynamic Controls: Badges, Machine Selector & Fullscreen Toggle */}
-          <div className="flex items-center space-x-3">
-            
-            {/* Badge Trạng thái Mạng & Nhiệt độ */}
-            <div className="hidden sm:flex items-center space-x-2">
-              <span
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold border ${
-                  isOnline
-                    ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
-                    : 'bg-red-500/15 text-red-400 border-red-500/30 animate-pulse'
-                }`}
-              >
-                {isOnline ? '🟢 4G ONLINE' : '🔴 OFFLINE'}
-              </span>
-              <span
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold border ${
-                  temperature > 10
-                    ? 'bg-red-500/15 text-red-400 border-red-500/30 animate-pulse'
-                    : 'bg-sky-500/15 text-sky-400 border-sky-500/30'
-                }`}
-              >
-                ❄️ {temperature.toFixed(1)}°C
-              </span>
-            </div>
-
-            {/* Machine Dropdown */}
-            <div className="flex items-center bg-slate-800 border border-slate-700 rounded-2xl px-3 py-1.5 focus-within:ring-2 focus-within:ring-emerald-500 transition">
-              <Building2 className="w-5 h-5 text-emerald-400 mr-2 shrink-0" />
-              <div className="flex flex-col">
-                <span className="text-[9px] text-slate-400 uppercase tracking-widest font-bold">Mô phỏng Kiosk</span>
-                <select
-                  value={selectedMachineId}
-                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setSelectedMachineId(e.target.value)}
-                  className="bg-transparent text-sm font-bold text-white focus:outline-none cursor-pointer pr-1"
-                >
-                  {MOCK_MACHINES.map((m) => (
-                    <option key={m.id} value={m.id} className="bg-slate-900 text-white">
-                      {m.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            {/* Fullscreen Button */}
-            <button
-              onClick={toggleFullscreen}
-              className="p-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-2xl transition text-slate-300 hover:text-white"
-              title="Chế độ Fullscreen Kiosk"
-            >
-              {isFullscreen ? <Minimize className="w-5 h-5" /> : <Maximize className="w-5 h-5" />}
-            </button>
-
-            {/* Nút Bật/Tắt Secret Control Panel */}
-            <button
-              onClick={() => setShowSecretPanel(!showSecretPanel)}
-              className={`p-3 border rounded-2xl transition ${
-                showSecretPanel
-                  ? 'bg-amber-500/20 border-amber-500/50 text-amber-400'
-                  : 'bg-slate-800 border-slate-700 text-slate-300 hover:text-white'
-              }`}
-              title="Bật/Tắt Secret Control Panel (FE1)"
-            >
-              <Wrench className="w-5 h-5" />
-            </button>
-          </div>
-        </header>
-
-        {/* --- KIOSK MAIN INVENTORY GRID --- */}
-        <main
-          className={`flex-1 p-4 md:p-8 max-w-7xl mx-auto w-full transition-all duration-300 ${
-            isSafetyLocked ? 'pointer-events-none blur-md opacity-40' : ''
-          }`}
-        >
-          {/* Top Status Banner */}
-          <div className="mb-6 bg-slate-900/60 border border-slate-800 rounded-2xl p-4 flex justify-between items-center shadow-md">
-            <div className="flex items-center space-x-2 text-sm text-slate-300">
-              <PackageCheck className="w-5 h-5 text-emerald-400" />
-              <span>Vị trí hiện tại: <strong className="text-white">{currentMachine?.location}</strong></span>
-            </div>
-            <button
-              onClick={() => fetchMachineInventory(selectedMachineId)}
-              className="flex items-center space-x-2 text-xs font-semibold text-emerald-400 hover:text-emerald-300 transition"
-            >
-              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-              <span>Làm mới danh mục</span>
-            </button>
-          </div>
-
-          {/* Slot Grid View */}
-          {loading ? (
-            <div className="flex flex-col items-center justify-center py-24 space-y-4">
-              <RefreshCw className="w-12 h-12 text-emerald-400 animate-spin" />
-              <p className="text-slate-400 font-medium tracking-wide">Đang đồng bộ dữ liệu khay hàng...</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {slots.map((slot) => {
-                const isOutOfStock = slot.stock <= 0;
-                return (
-                  <div
-                    key={slot.slotId}
-                    className={`relative bg-slate-900/80 rounded-3xl border transition-all duration-300 flex flex-col justify-between overflow-hidden shadow-2xl ${
-                      isOutOfStock
-                        ? 'border-slate-800/80 opacity-60'
-                        : 'border-slate-800 hover:border-emerald-500/50 hover:scale-[1.02]'
-                    }`}
-                  >
-                    {/* Slot Code Badge (A1, A2...) */}
-                    <div className="absolute top-4 left-4 bg-slate-950/80 border border-slate-700 px-3.5 py-1 rounded-full text-xs font-black text-emerald-400 z-10 backdrop-blur-sm">
-                      Khay {slot.slotCode}
-                    </div>
-
-                    {/* Stock Tag */}
-                    <div className="absolute top-4 right-4 bg-slate-950/80 border border-slate-700 px-3 py-1 rounded-full text-xs font-bold text-slate-300 z-10 backdrop-blur-sm">
-                      Tồn: <span className={isOutOfStock ? 'text-red-400' : 'text-emerald-400'}>{slot.stock}</span>
-                    </div>
-
-                    {/* Image Container */}
-                    <div className="relative h-48 w-full bg-slate-950 overflow-hidden flex items-center justify-center">
-                      <img
-                        src={slot.imageUrl}
-                        alt={slot.productName}
-                        className="h-full w-full object-cover transition-transform duration-500 hover:scale-105"
-                        loading="lazy"
-                      />
-                      {isOutOfStock && (
-                        <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center">
-                          <span className="bg-red-500/20 text-red-400 border border-red-500/40 px-5 py-2 rounded-2xl text-sm font-black tracking-widest uppercase">
-                            HẾT HÀNG
-                          </span>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Card Footer Content */}
-                    <div className="p-5 flex flex-col flex-1 justify-between space-y-4">
-                      <div>
-                        <h3 className="text-lg font-black text-white tracking-wide">{slot.productName}</h3>
-                        <p className="text-xl font-black text-emerald-400 mt-1">
-                          {slot.price.toLocaleString('vi-VN')} <span className="text-xs font-normal">VNĐ</span>
-                        </p>
-                      </div>
-
-                      {/* Touch Button */}
-                      <button
-                        disabled={isOutOfStock}
-                        onClick={() => {
-                          setActiveSlot(slot);
-                          setTxStatus('IDLE');
-                        }}
-                        className={`w-full py-3.5 rounded-2xl font-black text-sm tracking-wider transition-all flex items-center justify-center space-x-2 active:scale-95 ${
-                          isOutOfStock
-                            ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
-                            : 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-lg shadow-emerald-500/20 cursor-pointer'
-                        }`}
-                      >
-                        <ShoppingCart className="w-4 h-4" />
-                        <span>CHỌN MUA</span>
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </main>
-
-        {/* --- KIOSK FOOTER --- */}
-        <footer className="p-4 text-center text-xs text-slate-500 border-t border-slate-900 bg-slate-950">
-          Mô phỏng giao diện màn hình cảm ứng Kiosk Bán Trái Cây Tự Động • Đáp ứng chuẩn tương tác FIFO &amp; IoT Edge
-        </footer>
-
-        {/* --- MODAL POPUP: CHI TIẾT & XÁC NHẬN MUA --- */}
-        {activeSlot && (
-          <KioskDetailModal
-            activeSlot={activeSlot}
-            txStatus={txStatus}
-            feedbackMessage={feedbackMessage}
-            isProcessing={isProcessing}
-            onClose={handleCloseModal}
-            onConfirm={handleConfirmPurchase}
-          />
-        )}
+  // 5. Hiển thị UI theo trạng thái
+  if (loading) {
+    return (
+      <div className="h-screen bg-slate-950 flex items-center justify-center text-white">
+        <RefreshCw className="animate-spin w-10 h-10 text-emerald-400" />
       </div>
+    );
+  }
 
-      {/* ========================================================= */}
-      {/* 2. SECRET CONTROL PANEL (Bên phải - Demo FE1)             */}
-      {/* ========================================================= */}
-      {showSecretPanel && (
-        <aside className="w-[420px] bg-slate-900 border-l-2 border-slate-800 p-5 flex flex-col h-full shrink-0 shadow-2xl z-30">
-          <div className="border-b border-slate-800 pb-3 mb-4 flex justify-between items-start">
-            <div>
-              <h2 className="text-lg font-bold text-amber-400 flex items-center gap-2">
-                <span>🔧 Secret Control Panel</span>
-              </h2>
-              <p className="text-xs text-slate-400 mt-0.5">
-                IoT Edge Simulator • Key: <strong className="text-emerald-400">{kafkaKey}</strong>
-              </p>
-            </div>
-            <button
-              onClick={() => setShowSecretPanel(false)}
-              className="text-slate-400 hover:text-white px-2 py-1 rounded-lg hover:bg-slate-800"
-            >
-              ✕
-            </button>
-          </div>
+  // Khóa UI nếu máy lỗi
+  if (machineStatus?.status !== 'ONLINE') {
+    return (
+      <div className="h-screen bg-slate-950 flex flex-col items-center justify-center text-center p-6">
+        <AlertTriangle className="w-24 h-24 text-red-500 mb-6 animate-pulse" />
+        <h1 className="text-4xl font-black text-white mb-2">HỆ THỐNG ĐANG BẢO TRÌ</h1>
+        <p className="text-slate-400 text-lg">Thiết bị đang mất kết nối hoặc gặp sự cố. Vui lòng quay lại sau.</p>
+        <button onClick={fetchMachineData} className="mt-8 px-6 py-3 bg-slate-800 text-white rounded-xl">
+          Thử lại
+        </button>
+      </div>
+    );
+  }
 
-          <div className="space-y-4 mb-4 flex-shrink-0">
-            {/* Thanh trượt nhiệt độ (4°C -> 15°C) */}
-            <div className="bg-slate-800/80 p-4 rounded-2xl border border-slate-700/80">
-              <label className="flex justify-between font-bold text-sm mb-2">
-                <span>Nhiệt độ buồng lạnh:</span>
-                <span className={temperature > 10 ? 'text-red-400 font-black' : 'text-emerald-400 font-black'}>
-                  {temperature.toFixed(1)} °C
-                </span>
-              </label>
-              <input
-                type="range"
-                min="4"
-                max="15"
-                step="0.5"
-                value={temperature}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTemperature(parseFloat(e.target.value))}
-                className="w-full accent-emerald-400 cursor-pointer"
-              />
-              <div className="flex justify-between text-[10px] text-slate-400 mt-1">
-                <span>4°C (Chuẩn)</span>
-                <span>10°C (Ngưỡng)</span>
-                <span>15°C (Nguy hiểm)</span>
+  // Render Luồng chuẩn (Menu -> QR -> Dispense)
+  return (
+    <div className="h-screen bg-slate-950 flex flex-col relative text-white">
+      {/* Header */}
+      <header className="p-4 bg-slate-900 border-b border-slate-800 flex justify-between items-center">
+        <h1 className="text-2xl font-black text-emerald-400">FRESH KIOSK</h1>
+        <span className="px-3 py-1 bg-sky-500/20 text-sky-400 rounded-full text-sm font-bold">
+          Nhiệt độ: {machineStatus.temperature}°C
+        </span>
+      </header>
+
+      {/* Main Grid */}
+      <main className="flex-1 p-6 grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6 overflow-y-auto pb-32">
+        {slots.map(slot => {
+          const isOutOfStock = slot.currentStock <= 0 || slot.status === 'OUT_OF_STOCK';
+          const qtyInCart = cart.get(slot.slotId) ?? 0;
+
+          return (
+            <div key={slot.slotId} className={`bg-slate-900 rounded-2xl p-4 border flex flex-col ${isOutOfStock ? 'border-slate-800 opacity-50' : 'border-slate-700'}`}>
+              <div className="h-40 bg-slate-800 rounded-xl mb-4 overflow-hidden flex items-center justify-center relative">
+                <img src={slot.productImageUrl || 'https://via.placeholder.com/200'} alt={slot.productName} className="object-cover h-full w-full" />
+                {isOutOfStock && <div className="absolute inset-0 bg-black/60 flex items-center justify-center font-bold text-red-400">HẾT HÀNG</div>}
               </div>
-            </div>
-
-            {/* Nút gạt Ngắt kết nối mạng (Simulate Network Drop) */}
-            <div className="bg-slate-800/80 p-4 rounded-2xl border border-slate-700/80 flex items-center justify-between">
-              <div>
-                <p className="font-bold text-sm">Simulate Network Drop</p>
-                <p className="text-xs text-slate-400">Cơ chế Store-and-Forward</p>
-              </div>
-              <button
-                onClick={() => setIsOnline(!isOnline)}
-                className={`px-4 py-2 rounded-xl text-xs font-black transition shadow-lg ${
-                  isOnline
-                    ? 'bg-red-600 hover:bg-red-500 text-white'
-                    : 'bg-emerald-500 hover:bg-emerald-400 text-slate-950'
-                }`}
+              <h3 className="font-bold text-lg mb-1">{slot.productName}</h3>
+              <p className="text-emerald-400 font-bold mb-4">{slot.price.toLocaleString('vi-VN')} đ</p>
+              
+              <button 
+                disabled={isOutOfStock || qtyInCart >= slot.currentStock}
+                onClick={() => handleAddToCart(slot)}
+                className="mt-auto bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold py-2 rounded-xl disabled:bg-slate-700 disabled:text-slate-500 transition"
               >
-                {isOnline ? 'Ngắt kết nối mạng' : 'Khôi phục mạng'}
+                {qtyInCart > 0 ? `Đã chọn (${qtyInCart})` : 'Chọn mua'}
               </button>
             </div>
+          );
+        })}
+      </main>
 
-            {/* Trạng thái Watchdog & Bộ nhớ đệm */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="bg-slate-800/80 p-3 rounded-2xl text-center border border-slate-700/80">
-                <p className="text-[11px] text-slate-400">Hardware Watchdog</p>
-                <p className={`font-black text-xs mt-1 ${motorActive ? 'text-emerald-400' : 'text-red-400 animate-pulse'}`}>
-                  {motorActive ? 'MOTOR CHẠY' : 'ĐÃ NGẮT (3s) 🛑'}
-                </p>
-              </div>
-              <div className="bg-slate-800/80 p-3 rounded-2xl text-center border border-slate-700/80">
-                <p className="text-[11px] text-slate-400">Store &amp; Forward Buffer</p>
-                <p className="font-black text-xs mt-1 text-amber-400">{offlineBuffer.length} gói lưu thẻ nhớ</p>
-              </div>
-            </div>
+      {/* Cart Footer */}
+      {cart.size > 0 && paymentStatus === 'IDLE' && (
+        <footer className="absolute bottom-0 left-0 right-0 bg-slate-900 border-t border-slate-800 p-6 flex justify-between items-center shadow-2xl">
+          <div>
+            <p className="text-slate-400 text-sm">Đã chọn {cart.size} sản phẩm</p>
+            <p className="text-3xl font-black text-emerald-400">{totalAmount.toLocaleString('vi-VN')} đ</p>
           </div>
+          <div className="flex gap-4">
+            <button onClick={() => setCart(new Map())} className="px-6 py-3 rounded-xl border border-slate-700 hover:bg-slate-800 font-bold">
+              Hủy
+            </button>
+            <button onClick={handleCheckout} disabled={isProcessing} className="px-8 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-lg shadow-lg flex items-center gap-2">
+              {isProcessing ? <RefreshCw className="animate-spin w-5 h-5" /> : <ShoppingCart />}
+              THANH TOÁN
+            </button>
+          </div>
+        </footer>
+      )}
 
-          {/* Terminal / Logs của MQTT -> Kafka Bridge */}
-          <div className="flex-1 bg-slate-950 rounded-2xl p-3.5 font-mono text-xs overflow-y-auto border border-slate-800 flex flex-col">
-            <h3 className="text-slate-400 mb-2 border-b border-slate-800 pb-2 font-bold flex justify-between items-center">
-              <span>&gt; MQTT_to_Kafka_Bridge.log</span>
-              <span className="text-emerald-400 animate-pulse text-[10px]">● 5s/tick</span>
-            </h3>
-            <div className="space-y-1.5 flex-1">
-              {logs.map((log, index) => (
-                <p
-                  key={index}
-                  className={`leading-relaxed ${
-                    log.includes('⚠️') || log.includes('🛑')
-                      ? 'text-red-400 font-semibold'
-                      : log.includes('💾')
-                      ? 'text-amber-300'
-                      : log.includes('🚀') || log.includes('🔄')
-                      ? 'text-emerald-400 font-semibold'
-                      : 'text-sky-300'
-                  }`}
-                >
-                  {log}
+      {/* Payment/QR Modal */}
+      {paymentStatus !== 'IDLE' && currentOrder && (
+        <div className="absolute inset-0 bg-black/90 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 p-8 rounded-3xl max-w-md w-full border border-slate-700 text-center">
+            
+            {paymentStatus === 'PENDING' && (
+              <>
+                <h2 className="text-2xl font-black mb-2">Thanh Toán VietQR</h2>
+                <p className="text-slate-400 mb-6">Mã đơn: {currentOrder.orderCode}</p>
+                <div className="bg-white p-4 rounded-2xl inline-block mb-6">
+                  <img src={currentOrder.qrCodeUrl} alt="VietQR" className="w-64 h-64 object-contain" />
+                </div>
+                <p className="text-3xl font-black text-emerald-400 mb-4">{currentOrder.totalAmount.toLocaleString('vi-VN')} đ</p>
+                <p className="text-amber-400 font-bold mb-6">
+                  Thời gian còn lại: {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')}
                 </p>
-              ))}
-              {logs.length === 0 && (
-                <p className="text-slate-600 italic">Đang thu thập cảm biến chu kỳ 5s/lần...</p>
-              )}
-            </div>
+                <button onClick={() => setPaymentStatus('IDLE')} className="w-full py-3 border border-slate-700 rounded-xl hover:bg-slate-800">
+                  Đóng / Hủy giao dịch
+                </button>
+              </>
+            )}
+
+            {paymentStatus === 'SUCCESS' && (
+              <div className="py-12">
+                <CheckCircle className="w-24 h-24 text-emerald-400 mx-auto mb-6" />
+                <h2 className="text-3xl font-black text-emerald-400 mb-2">Thanh toán thành công!</h2>
+                <p className="text-slate-300">Máy đang chuẩn bị nhả hàng, vui lòng chờ trong giây lát...</p>
+                <button onClick={() => { setPaymentStatus('IDLE'); setCart(new Map()); fetchMachineData(); }} className="mt-8 px-8 py-3 bg-emerald-500 text-slate-950 font-bold rounded-xl">
+                  Quay về trang chủ
+                </button>
+              </div>
+            )}
+
+            {(paymentStatus === 'FAILED' || paymentStatus === 'EXPIRED') && (
+              <div className="py-12">
+                <X className="w-24 h-24 text-red-500 mx-auto mb-6" />
+                <h2 className="text-3xl font-black text-red-400 mb-2">
+                  {paymentStatus === 'EXPIRED' ? 'Hết hạn thanh toán' : 'Giao dịch thất bại'}
+                </h2>
+                <button onClick={() => { setPaymentStatus('IDLE'); setCurrentOrder(null); }} className="mt-8 px-8 py-3 bg-slate-800 text-white font-bold rounded-xl border border-slate-700">
+                  Thử lại
+                </button>
+              </div>
+            )}
+            
           </div>
-        </aside>
+        </div>
       )}
     </div>
   );
