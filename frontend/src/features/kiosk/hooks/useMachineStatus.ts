@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { kioskService } from '../services/kioskService';
-import type { MachineStatusResponse } from '../services/kioskService';
+import type { MachineStatusDTO } from '../types/kiosk';
 
 export const useMachineStatus = (machineId: number, pollingInterval = 5000) => {
-  const [statusData, setStatusData] = useState<MachineStatusResponse | null>(null);
+  const [statusData, setStatusData] = useState<MachineStatusDTO | null>(null);
   const [isLocked, setIsLocked] = useState(false);
 
   useEffect(() => {
@@ -15,11 +15,11 @@ export const useMachineStatus = (machineId: number, pollingInterval = 5000) => {
         const data = await kioskService.getMachineStatus(machineId);
         if (isMounted) {
           setStatusData(data);
-          // Khóa máy nếu trạng thái là OUT_OF_ORDER hoặc MAINTENANCE
-          setIsLocked(data.status !== 'ACTIVE');
+          // Khóa máy nếu không ở trạng thái ONLINE
+          setIsLocked(data.status !== 'ONLINE');
         }
       } catch (error) {
-        console.error("Lỗi khi kiểm tra trạng thái máy Kiosk:", error);
+        console.error('Lỗi khi kiểm tra trạng thái máy Kiosk:', error);
       }
     };
 

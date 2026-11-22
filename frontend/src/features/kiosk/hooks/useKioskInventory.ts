@@ -16,7 +16,13 @@ export const useKioskInventory = (machineId: number) => {
         setLoading(true);
         const data = await kioskService.getMachineSlots(machineId);
         if (isMounted) {
-          setSlots(data);
+          const mappedSlots: MachineSlot[] = data.map((slot) => ({
+            ...slot,
+            capacity: slot.capacity ?? slot.currentStock,
+            productPrice: slot.productPrice ?? slot.price,
+            productImageUrl: slot.productImageUrl ?? null,
+          }));
+          setSlots(mappedSlots);
           setError(null);
         }
       } catch {

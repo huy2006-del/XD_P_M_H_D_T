@@ -1,180 +1,390 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, 
-  PieChart, Pie, Cell, Legend 
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RechartsTooltip,
+  ResponsiveContainer,
 } from 'recharts';
-import toast, { Toaster } from 'react-hot-toast';
+import {
+  Activity,
+  AlertTriangle,
+  Download,
+  Monitor,
+  RefreshCw,
+  ShoppingBag,
+  Thermometer,
+  TrendingUp,
+  Wifi,
+  WifiOff,
+} from 'lucide-react';
+import { toast } from 'sonner';
 
-import { adminDashboardService, type DashboardData } from '../services/adminDashboardService';
-
-// Bảng màu cho Biểu đồ Tròn
-const PIE_COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'];
+import { useWebSocketSubscription } from '../../../shared/realtime/useWebSocketSubscription';
+import type { AlertItem } from '../../alerts/alertService';
+import {
+  adminDashboardService,
+  type DashboardData,
+} from '../services/adminDashboardService';
 
 export const AdminDashboardPage: React.FC = () => {
+  const navigate = useNavigate();
+
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [isExporting, setIsExporting] = useState<boolean>(false);
 
-  // Load dữ liệu khi vào trang
-  useEffect(() => {
-    let isMounted = true;
-    const fetchData = async () => {
-      try {
-        setLoading(true);
-        const result = await adminDashboardService.getDashboardData();
-        if (isMounted) setData(result);
-      } catch {
-
-        toast.error("Không thể tải dữ liệu Dashboard!");
-      } finally {
-        if (isMounted) setLoading(false);
-      }
-    };
-    fetchData();
-    
-    return () => { isMounted = false; };
+  const fetchData = useCallback(async () => {
+    try {
+      setLoading(true);
+      const result = await adminDashboardService.getDashboardData(7);
+      setData(result);
+    } catch {
+      toast.error('Không thể tải dữ liệu Dashboard từ Backend!');
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  // Hàm xử lý tải báo cáo (Nhiệm vụ 6.8)
+  useEffect(() => {
+    void fetchData();
+  }, [fetchData]);
+
+  // Cập nhật realtime số cảnh báo chưa xử lý qua STOMP WebSocket /topic/alerts
+  const alertsWs = useWebSocketSubscription<AlertItem>('/topic/alerts', (incomingAlert) => {
+    if (!incomingAlert?.id) return;
+    setData((prev) => {
+      if (!prev) return prev;
+      const exists = prev.alerts.some((a) => a.id === incomingAlert.id);
+      const nextAlerts = exists
+        ? prev.alerts.map((a) => (a.id === incomingAlert.id ? incomingAlert : a))
+        : [incomingAlert, ...prev.alerts];
+      return {
+        ...prev,
+        alerts: nextAlerts,
+      };
+    });
+    if (incomingAlert.severity === 'CRITICAL') {
+      void fetchData();
+    }
+  });
+
   const handleExportReport = async () => {
     try {
       setIsExporting(true);
-      toast.loading("Đang tạo tệp báo cáo...", { id: 'export-toast' });
-      
       await adminDashboardService.exportRevenueReport();
-      
-      toast.success("Tải báo cáo doanh thu thành công!", { id: 'export-toast' });
+      toast.success('Đã xuất báo cáo đơn hàng CSV từ Backend!');
     } catch {
-
-      toast.error("Lỗi khi tải báo cáo!", { id: 'export-toast' });
+      toast.error('Không thể tải báo cáo từ /api/v1/reports/export-csv.');
     } finally {
       setIsExporting(false);
     }
   };
 
-  // Render Skeleton Loading
-  if (loading || !data) {
+  const machineStats = useMemo(() => {
+    const list = data?.machines ?? [];
+    const online = list.filter((m) => m.status === 'ONLINE').length;
+    const outOfOrder = list.filter(
+      (m) => m.status === 'OUT_OF_ORDER' || m.status === 'ERROR'
+    ).length;
+    return { total: list.length, online, outOfOrder };
+  }, [data?.machines]);
+
+  const unresolvedAlerts = useMemo(
+    () => (data?.alerts ?? []).filter((a) => a.status !== 'RESOLVED'),
+    [data?.alerts]
+  );
+
+  if (loading && !data) {
     return (
-      <div className="p-8 flex items-center justify-center h-screen bg-gray-50">
-        <div className="text-xl text-gray-500 animate-pulse font-semibold">Đang tải trung tâm điều khiển...</div>
+      <div className="p-8 flex items-center justify-center min-h-[60vh]">
+        <div className="text-base text-gray-500 animate-pulse font-medium">
+          Đang tải dữ liệu tổng quan từ Backend...
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="p-8 bg-gray-50 min-h-screen font-sans">
-      <Toaster position="top-right" reverseOrder={false} />
+    <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-6 font-sans text-gray-800">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-bold text-gray-900">
+            Dashboard Tổng Quan Admin
+          </h1>
+          <div className="flex flex-wrap items-center gap-3 text-xs text-gray-500 mt-1">
+            <span>
+              Đồng bộ gần nhất:{' '}
+              <strong>
+                {data?.fetchedAt
+                  ? new Date(data.fetchedAt).toLocaleTimeString('vi-VN')
+                  : '--'}
+              </strong>
+            </span>
+            <span
+              className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full border font-semibold ${
+                alertsWs.isConnected
+                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                  : 'bg-red-50 text-red-700 border-red-200'
+              }`}
+            >
+              {alertsWs.isConnected ? (
+                <>
+                  <Wifi className="w-3 h-3" /> Alerts WS kết nối
+                </>
+              ) : (
+                <>
+                  <WifiOff className="w-3 h-3" /> Alerts WS mất kết nối
+                  <button
+                    onClick={alertsWs.reconnect}
+                    className="ml-1 underline text-blue-700"
+                  >
+                    Kết nối lại
+                  </button>
+                </>
+              )}
+            </span>
+          </div>
+        </div>
 
-      {/* --- HEADER & NÚT XUẤT BÁO CÁO --- */}
-      <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
-        <h1 className="text-3xl font-bold text-gray-800">Dashboard Tổng Quan</h1>
-        
-        <button 
-          onClick={handleExportReport}
-          disabled={isExporting}
-          className={`flex items-center gap-2 px-6 py-2.5 rounded-lg font-bold text-white shadow-md transition-all ${
-            isExporting ? 'bg-gray-400 cursor-not-allowed' : 'bg-green-600 hover:bg-green-700 active:scale-95'
-          }`}
-        >
-          {isExporting ? (
-            <span className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full inline-block"></span>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => void fetchData()}
+            disabled={loading}
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium bg-white border border-gray-200 hover:bg-gray-50 disabled:opacity-50"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            Làm mới
+          </button>
+
+          <button
+            onClick={() => void handleExportReport()}
+            disabled={isExporting}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 shadow-sm"
+          >
+            <Download className="w-4 h-4" />
+            {isExporting ? 'Đang xuất...' : 'Xuất CSV Đơn Hàng'}
+          </button>
+        </div>
+      </div>
+
+      {data && data.partialErrors.length > 0 && (
+        <div className="bg-amber-50 border border-amber-200 text-amber-900 rounded-xl p-4 text-xs space-y-1">
+          <p className="font-bold">Một số API Backend hiện chưa phản hồi:</p>
+          <ul className="list-disc pl-5 space-y-0.5">
+            {data.partialErrors.map((err, idx) => (
+              <li key={idx}>{err}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* 4 THẺ KPI TỪ BACKEND */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+        <KpiCard
+          title="Doanh Thu Tháng Này"
+          value={
+            data?.overview
+              ? `${data.overview.thisMonthRevenue.toLocaleString('vi-VN')} đ`
+              : 'Chưa có dữ liệu'
+          }
+          subText={
+            data?.overview
+              ? `Hôm nay: ${data.overview.todayRevenue.toLocaleString('vi-VN')} đ`
+              : 'Nguồn: /api/v1/analytics/overview'
+          }
+          icon={<TrendingUp className="w-5 h-5" />}
+          color="text-blue-600"
+          bg="bg-blue-50"
+        />
+
+        <KpiCard
+          title="Đơn Hàng Thành Công"
+          value={data?.overview ? String(data.overview.successOrderCount) : '--'}
+          subText={
+            data?.overview
+              ? `Thất bại: ${data.overview.failedOrderCount} • Lấp đầy kho: ${data.overview.inventoryFillRate.toFixed(1)}%`
+              : 'Nguồn: /api/v1/analytics/overview'
+          }
+          icon={<ShoppingBag className="w-5 h-5" />}
+          color="text-emerald-600"
+          bg="bg-emerald-50"
+        />
+
+        <KpiCard
+          title="Số Máy Online"
+          value={`${machineStats.online} / ${machineStats.total}`}
+          subText={
+            machineStats.outOfOrder > 0
+              ? `${machineStats.outOfOrder} máy đang lỗi / ngừng hoạt động`
+              : 'Tất cả máy trong trạng thái kiểm soát'
+          }
+          icon={<Monitor className="w-5 h-5" />}
+          color="text-indigo-600"
+          bg="bg-indigo-50"
+          onClick={() => navigate('/admin/machines')}
+        />
+
+        <KpiCard
+          title="Cảnh Báo Chưa Xử Lý"
+          value={String(unresolvedAlerts.length)}
+          subText={
+            data?.coldChainHealth
+              ? `MTTR xử lý sự cố: ${data.coldChainHealth.systemMttrMinutes.toFixed(1)} phút`
+              : 'Nguồn: /api/v1/alerts'
+          }
+          icon={<AlertTriangle className="w-5 h-5" />}
+          color="text-red-600"
+          bg="bg-red-50"
+          onClick={() =>
+            navigate(`/admin/machines/${data?.machines?.[0]?.id ?? 1}/coldchain`)
+          }
+        />
+      </div>
+
+      {/* BIỂU ĐỒ DOANH THU 7 NGÀY & DANH SÁCH CẢNH BÁO CHƯA XỬ LÝ */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 lg:col-span-2">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-base font-bold text-gray-900">
+                Doanh Thu 7 Ngày Gần Nhất
+              </h2>
+              <p className="text-xs text-gray-500">
+                Nguồn: GET /api/v1/analytics/revenue-chart?range=7
+              </p>
+            </div>
+          </div>
+
+          {!data?.revenueChart.length ? (
+            <div className="h-72 flex items-center justify-center bg-gray-50 rounded-xl border border-dashed border-gray-200 text-sm text-gray-500">
+              Chưa có dữ liệu doanh thu trong 7 ngày qua.
+            </div>
           ) : (
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-            </svg>
-          )}
-          {isExporting ? 'Đang xuất...' : 'Xuất Báo Cáo Doanh Thu'}
-        </button>
-      </div>
-
-      {/* --- 4 THẺ KPI NỔI BẬT --- */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        <KpiCard title="Tổng Doanh Thu" value={`${data.kpis.totalRevenue.toLocaleString('vi-VN')} đ`} color="text-blue-600" bg="bg-blue-100" />
-        <KpiCard title="Đơn Đã Bán" value={data.kpis.totalOrders.toString()} color="text-green-600" bg="bg-green-100" />
-        <KpiCard title="Số Máy Online" value={`${data.kpis.onlineMachines} / 45`} color="text-indigo-600" bg="bg-indigo-100" />
-        <KpiCard title="Cảnh Báo Chưa Xử Lý" value={data.kpis.unresolvedWarnings.toString()} color="text-red-600" bg="bg-red-100" />
-      </div>
-
-      {/* --- BIỂU ĐỒ --- */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        
-        {/* Biểu đồ Cột: Doanh thu theo tuần */}
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 lg:col-span-2">
-          <h2 className="text-xl font-bold text-gray-700 mb-6">Doanh Thu Trong Tuần</h2>
-          <div className="h-[350px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={data.revenueChart} margin={{ top: 10, right: 10, left: 20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
-                <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fill: '#6B7280' }} dy={10} />
-                <YAxis 
-                  tickFormatter={(val) => `${(Number(val) / 1000000)}M`} 
-                  axisLine={false} 
-                  tickLine={false} 
-                  tick={{ fill: '#6B7280' }} 
-                />
-                <RechartsTooltip 
-                  cursor={{ fill: '#F3F4F6' }}
-
-                  formatter={(value) => {
-                    const numericValue = typeof value === 'number' ? value : Number(value) || 0;
-                    return [`${numericValue.toLocaleString('vi-VN')} VNĐ`, 'Doanh thu'];
-                  }}
-                />
-                <Bar dataKey="revenue" fill="#3B82F6" radius={[6, 6, 0, 0]} barSize={40} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        {/* Biểu đồ Tròn: Tỷ trọng sản phẩm bán chạy */}
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-          <h2 className="text-xl font-bold text-gray-700 mb-6">Top 5 Trái Cây Bán Chạy</h2>
-          <div className="h-[350px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={data.topProductsChart}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={100}
-                  paddingAngle={5}
-                  dataKey="sales"
-                  nameKey="name"
+            <div className="h-72 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={data.revenueChart}
+                  margin={{ top: 10, right: 10, left: 10, bottom: 0 }}
                 >
-                  {data.topProductsChart.map((_, index) => (
-                    <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
-                  ))}
-                </Pie>
-
-                <RechartsTooltip 
-                  formatter={(value) => {
-                    const numericValue = typeof value === 'number' ? value : Number(value) || 0;
-                    return [`${numericValue} đơn`, 'Đã bán'];
-                  }} 
-                />
-                <Legend verticalAlign="bottom" height={36} iconType="circle" />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
+                  <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fill: '#6B7280', fontSize: 12 }} />
+                  <YAxis
+                    tickFormatter={(val) =>
+                      Number(val) >= 1_000_000
+                        ? `${(Number(val) / 1_000_000).toFixed(1)}M`
+                        : `${Number(val).toLocaleString('vi-VN')}`
+                    }
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fill: '#6B7280', fontSize: 11 }}
+                  />
+                  <RechartsTooltip
+                    cursor={{ fill: '#F3F4F6' }}
+                    formatter={(value) => [
+                      `${Number(value || 0).toLocaleString('vi-VN')} VNĐ`,
+                      'Doanh thu',
+                    ]}
+                  />
+                  <Bar dataKey="revenue" fill="#2563EB" radius={[6, 6, 0, 0]} maxBarSize={42} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
         </div>
 
+        {/* CẢNH BÁO ĐANG MỞ + SỨC KHỎE CHUỖI LẠNH */}
+        <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-base font-bold text-gray-900 flex items-center gap-1.5">
+                <Thermometer className="w-4 h-4 text-red-500" />
+                Cảnh báo đang mở ({unresolvedAlerts.length})
+              </h2>
+              <button
+                onClick={() =>
+                  navigate(`/admin/machines/${data?.machines?.[0]?.id ?? 1}/coldchain`)
+                }
+                className="text-xs font-semibold text-blue-600 hover:text-blue-800"
+              >
+                Mở giám sát →
+              </button>
+            </div>
+
+            {unresolvedAlerts.length === 0 ? (
+              <div className="p-6 text-center text-sm text-gray-500 bg-gray-50 rounded-xl border border-dashed border-gray-200">
+                Không có cảnh báo chưa xử lý.
+              </div>
+            ) : (
+              <div className="space-y-2.5 max-h-64 overflow-y-auto pr-1">
+                {unresolvedAlerts.slice(0, 5).map((alert) => (
+                  <button
+                    key={alert.id}
+                    type="button"
+                    onClick={() => navigate(`/admin/machines/${alert.machineId}/coldchain`)}
+                    className="w-full text-left p-3 rounded-xl border border-gray-100 hover:bg-gray-50 transition-colors"
+                  >
+                    <div className="flex items-center justify-between gap-2 mb-1">
+                      <span
+                        className={`text-[11px] font-bold px-2 py-0.5 rounded ${
+                          alert.severity === 'CRITICAL'
+                            ? 'bg-red-100 text-red-700'
+                            : 'bg-amber-100 text-amber-700'
+                        }`}
+                      >
+                        {alert.severity}
+                      </span>
+                      <span className="text-[11px] text-gray-400">
+                        Máy #{alert.machineId} • {alert.status}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-800 line-clamp-2">{alert.message}</p>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {data?.coldChainHealth && (
+            <div className="mt-4 pt-3 border-t border-gray-100 text-xs text-gray-600 flex items-center justify-between">
+              <span className="inline-flex items-center gap-1">
+                <Activity className="w-3.5 h-3.5 text-emerald-600" />
+                MTTR trung bình:
+              </span>
+              <strong>{data.coldChainHealth.systemMttrMinutes.toFixed(1)} phút</strong>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
 };
 
-// Component Thẻ KPI nhỏ gọn tái sử dụng
-const KpiCard: React.FC<{ title: string; value: string; color: string; bg: string }> = ({ title, value, color, bg }) => (
-  <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between hover:shadow-md transition-shadow">
-    <div>
-      <p className="text-sm font-semibold text-gray-500 mb-1">{title}</p>
-      <p className={`text-3xl font-black ${color}`}>{value}</p>
+const KpiCard: React.FC<{
+  title: string;
+  value: string;
+  subText: string;
+  icon: React.ReactNode;
+  color: string;
+  bg: string;
+  onClick?: () => void;
+}> = ({ title, value, subText, icon, color, bg, onClick }) => (
+  <div
+    onClick={onClick}
+    className={`bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex items-start justify-between gap-3 ${
+      onClick ? 'cursor-pointer hover:shadow-md transition-shadow' : ''
+    }`}
+  >
+    <div className="min-w-0">
+      <p className="text-xs font-semibold text-gray-500 mb-1">{title}</p>
+      <p className={`text-2xl font-black truncate ${color}`}>{value}</p>
+      <p className="text-[11px] text-gray-400 mt-1 line-clamp-2">{subText}</p>
     </div>
-    <div className={`w-12 h-12 rounded-full ${bg} flex items-center justify-center ${color}`}>
-      <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-      </svg>
+    <div className={`w-10 h-10 rounded-xl ${bg} flex items-center justify-center shrink-0 ${color}`}>
+      {icon}
     </div>
   </div>
 );

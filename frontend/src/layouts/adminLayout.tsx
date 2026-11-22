@@ -31,9 +31,9 @@ const menuItems = [
     path: "/admin/dashboard",
     icon: LayoutDashboard,
   },
-   {
+  {
     label: "Giám Sát Chuỗi Lạnh",
-    path: "/admin/machines/1/coldchain", // FE2 - Realtime Cold-Chain & Kafka
+    path: "/admin/machines/1/coldchain", // Realtime Cold-Chain (REST + STOMP WebSocket)
     icon: Thermometer,
   },
   {

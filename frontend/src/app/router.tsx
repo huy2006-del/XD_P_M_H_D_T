@@ -8,6 +8,7 @@ import ProtectedRoute from "./guards/ProtectedRoute";
 import RequireRole from "./guards/RequireRole";
 
 import LoginPage from "../features/auth/LoginPage";
+import { AdminDashboardPage } from "../features/admin/pages/AdminDashboardPage";
 import { ProductListPage } from "../features/products/pages/ProductListPage";
 import { ROUTES } from "../shared/constants/routes";
 import KioskSimulator from "../features/kiosk/KioskSimulator";
@@ -17,7 +18,7 @@ import { OrderManagementPage } from "../features/orders/pages/OrderManagementPag
 
 import { SpoilageReportPage } from "../features/reports/pages/SpoilageReportPage";
 import { AuditLogsPage } from "../features/audit/pages/AuditLogsPage";
-// FE3 - Fleet Dashboard
+
 const FleetDashboard = lazy(
   () => import("../features/fleet/pages/FleetDashboard.jsx")
 );
@@ -47,7 +48,6 @@ export const router = createBrowserRouter([
   {
     element: <ProtectedRoute />,
     children: [
-      // ADMIN
       {
         element: <RequireRole allowedRoles={["ADMIN"]} />,
         children: [
@@ -61,7 +61,7 @@ export const router = createBrowserRouter([
               },
               {
                 path: "dashboard",
-                element: <div>Admin Dashboard</div>,
+                element: <AdminDashboardPage />,
               },
               {
                 path: "orders",
@@ -99,7 +99,6 @@ export const router = createBrowserRouter([
           },
         ],
       },
-      // OPERATOR
       {
         element: <RequireRole allowedRoles={["OPERATOR"]} />,
         children: [

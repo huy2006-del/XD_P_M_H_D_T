@@ -245,7 +245,7 @@ export const KioskSimulatorPage: React.FC<Props> = ({ machineId }) => {
       </div>
 
       {/* ========================================================= */}
-      {/* 2. SECRET CONTROL PANEL (Khu vực Demo Kỹ thuật & Kafka)   */}
+      {/* 2. SECRET CONTROL PANEL (Khu vực Demo Kỹ thuật IoT Edge)   */}
       {/* ========================================================= */}
       {showSecretPanel && (
         <div className="w-[440px] bg-slate-900 text-slate-200 rounded-xl shadow-lg p-6 flex flex-col h-full border border-slate-700 shrink-0">
@@ -318,10 +318,10 @@ export const KioskSimulatorPage: React.FC<Props> = ({ machineId }) => {
             </div>
           </div>
 
-          {/* Terminal / Logs của Kafka Bridge */}
+          {/* Terminal / Logs của IoT Edge Simulator */}
           <div className="flex-1 bg-black rounded-lg p-3 font-mono text-xs overflow-y-auto border border-slate-700 flex flex-col">
             <h3 className="text-slate-400 mb-2 border-b border-slate-800 pb-2 font-bold flex justify-between">
-              <span>&gt; Edge_MQTT_to_Kafka.log</span>
+              <span>&gt; Edge_Telemetry_Simulator.log</span>
               <span className="text-green-500 animate-pulse">● Rec</span>
             </h3>
             <div className="space-y-1.5 flex-1">

@@ -50,12 +50,12 @@ export const useIoTSimulator = (machineId: string = 'MC-LANDMARK-01') => {
         if (offlineBuffer.length > 0) {
           addLog(`🔄 Phase 1: Gửi bản nháp đối chiếu Server cho ${offlineBuffer.length} gói tin...`);
           setTimeout(() => {
-            addLog(`🚀 Phase 2: Đã đồng bộ lô dữ liệu cũ lên Kafka. Idempotency Key OK!`);
+            addLog(`🚀 Phase 2: Đã đồng bộ lô dữ liệu bù tới Backend Simulator. Idempotency Key OK!`);
             setOfflineBuffer([]); // Xóa buffer sau khi gửi bù xong
           }, 1500);
         } else {
           // Gửi bình thường
-          addLog(`📡 [MQTT -> KAFKA] Đã phát gói tin: { T: ${temperature}°C, H: 85% }`);
+          addLog(`📡 [EDGE SIMULATOR] Đã tạo mẫu telemetry cục bộ: { T: ${temperature}°C, H: 85% }`);
         }
       } else {
         // CƠ CHẾ STORE-AND-FORWARD KHI MẤT MẠNG

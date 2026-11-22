@@ -11,6 +11,8 @@ export interface MachineSlotDTO {
   slotCode: string;
   productName: string;
   price: number;
+  productPrice?: number;
+  capacity?: number;
   currentStock: number;
   productImageUrl?: string;
   status: 'AVAILABLE' | 'OUT_OF_STOCK';
