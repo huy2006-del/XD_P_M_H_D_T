@@ -2,23 +2,84 @@ import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import axiosInstance from '../../../shared/api/axiosInstance';
 import type { PaginatedResponse } from '../../../shared/types/common.types';
-import type { FruitBatch, CreateBatchRequest } from '../types';
+import type { FruitBatch, CreateBatchRequest, BatchFilterParams } from '../types';
 
 const API_URL = '/api/v1/batches';
 
-export const useBatches = () => {
+export interface BatchPagination {
+  page: number;
+  size: number;
+  totalElements: number;
+  totalPages: number;
+}
+
+export const useBatches = (initialFilters?: Partial<BatchFilterParams>) => {
   const [batches, setBatches] = useState<FruitBatch[]>([]);
-  const [loading, setLoading] = useState<boolean>(false);
+  const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+
+  const [pagination, setPagination] = useState<BatchPagination>({
+    page: 0,
+    size: 10,
+    totalElements: 0,
+    totalPages: 1,
+  });
+
+  const [filters, setFilters] = useState<BatchFilterParams>({
+    productId: initialFilters?.productId ?? null,
+    expired: initialFilters?.expired ?? null,
+    expiringWithinDays: initialFilters?.expiringWithinDays ?? null,
+    search: initialFilters?.search ?? '',
+    page: 0,
+    size: 10,
+  });
 
   const fetchBatches = useCallback(async () => {
     setLoading(true);
+    setError(null);
+
     try {
-      const response = await axiosInstance.get<PaginatedResponse<FruitBatch>>(
-        API_URL
-      );
-      setBatches(response.data.content);
-      setError(null);
+      const params: Record<string, unknown> = {
+        page: pagination.page,
+        size: pagination.size,
+      };
+
+      if (filters.productId) {
+        params.productId = filters.productId;
+      }
+      if (typeof filters.expired === 'boolean') {
+        params.expired = filters.expired;
+      }
+      if (typeof filters.expiringWithinDays === 'number' && filters.expiringWithinDays > 0) {
+        params.expiringWithinDays = filters.expiringWithinDays;
+      }
+
+      const response = await axiosInstance.get<PaginatedResponse<FruitBatch>>(API_URL, {
+        params,
+      });
+
+      const data = response.data;
+      let items = Array.isArray(data.content) ? data.content : [];
+
+      // Lọc client-side cho ô tìm kiếm tự do theo mã lô hoặc nhà cung cấp
+      if (filters.search && filters.search.trim()) {
+        const query = filters.search.trim().toLowerCase();
+        items = items.filter(
+          (b) =>
+            b.batchCode.toLowerCase().includes(query) ||
+            (b.supplier && b.supplier.toLowerCase().includes(query)) ||
+            (b.productName && b.productName.toLowerCase().includes(query))
+        );
+      }
+
+      setBatches(items);
+      setPagination((prev) => ({
+        ...prev,
+        page: data.page ?? 0,
+        size: data.size ?? 10,
+        totalElements: data.totalElements ?? items.length,
+        totalPages: data.totalPages ?? Math.max(1, Math.ceil((data.totalElements ?? items.length) / (data.size ?? 10))),
+      }));
     } catch (err: unknown) {
       const message = axios.isAxiosError<{ message?: string }>(err)
         ? err.response?.data?.message ?? err.message
@@ -29,12 +90,13 @@ export const useBatches = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [pagination.page, pagination.size, filters.productId, filters.expired, filters.expiringWithinDays, filters.search]);
 
-  const createBatch = async (data: CreateBatchRequest) => {
+  const createBatch = async (data: CreateBatchRequest): Promise<FruitBatch> => {
     try {
-      await axiosInstance.post(API_URL, data);
-      await fetchBatches(); // Refresh lại danh sách sau khi thêm
+      const response = await axiosInstance.post<FruitBatch>(API_URL, data);
+      await fetchBatches();
+      return response.data;
     } catch (err: unknown) {
       const message = axios.isAxiosError<{ message?: string }>(err)
         ? err.response?.data?.message ?? err.message
@@ -45,9 +107,28 @@ export const useBatches = () => {
     }
   };
 
+  const setPage = (pageIndex: number) => {
+    setPagination((prev) => ({ ...prev, page: Math.max(0, pageIndex) }));
+  };
+
+  const updateFilters = (newFilters: Partial<BatchFilterParams>) => {
+    setFilters((prev) => ({ ...prev, ...newFilters }));
+    setPagination((prev) => ({ ...prev, page: 0 })); // Reset về trang đầu khi đổi filter
+  };
+
   useEffect(() => {
     fetchBatches();
   }, [fetchBatches]);
 
-  return { batches, loading, error, createBatch, refresh: fetchBatches };
+  return {
+    batches,
+    loading,
+    error,
+    pagination,
+    filters,
+    setPage,
+    updateFilters,
+    createBatch,
+    refresh: fetchBatches,
+  };
 };

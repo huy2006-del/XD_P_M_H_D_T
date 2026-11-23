@@ -1,14 +1,13 @@
-import { useState } from "react";
-import axios from "axios";
-import axiosInstance from "../../../shared/api/axiosInstance";
-import type { AddItemRequest, MachineSlot, FruitBatch, RestockItem } from "../types";
+import { useState } from 'react';
+import axios from 'axios';
+import axiosInstance from '../../../shared/api/axiosInstance';
+import type { AddItemRequest, MachineSlot, FruitBatch, RestockItem } from '../types';
 
 function getErrorMessage(error: unknown): string {
   if (axios.isAxiosError<{ message?: string }>(error)) {
     return error.response?.data?.message ?? error.message;
   }
-
-  return error instanceof Error ? error.message : "Đã xảy ra lỗi không xác định.";
+  return error instanceof Error ? error.message : 'Đã xảy ra lỗi không xác định khi nạp hàng.';
 }
 
 export function useRestockPlan() {
@@ -21,11 +20,7 @@ export function useRestockPlan() {
     setError(null);
   }
 
-  function addItem(
-    data: AddItemRequest,
-    slot: MachineSlot,
-    batch: FruitBatch
-  ) {
+  function addItem(data: AddItemRequest, slot: MachineSlot, batch: FruitBatch) {
     setError(null);
     setItems((currentItems) => {
       const existingItem = currentItems.find(
@@ -55,11 +50,18 @@ export function useRestockPlan() {
     });
   }
 
-  async function completePlan(): Promise<boolean> {
+  function removeItem(slotId: number, batchId: number) {
+    setItems((currentItems) =>
+      currentItems.filter((i) => !(i.slotId === slotId && i.batchId === batchId))
+    );
+  }
+
+  async function completePlan(notes?: string): Promise<boolean> {
+    void notes;
     if (isSubmitting) return false;
 
     if (items.length === 0) {
-      setError("Thêm ít nhất một lô hàng trước khi xác nhận.");
+      setError('Cần ít nhất một lô hàng trong danh sách trước khi xác nhận nạp.');
       return false;
     }
 
@@ -67,36 +69,31 @@ export function useRestockPlan() {
     setError(null);
 
     let loadedCount = 0;
+    const totalToLoad = items.length;
 
     try {
       for (const item of items) {
         try {
-          await axiosInstance.post(
-            `/api/v1/slots/${item.slotId}/batches`,
-            {
-              batchId: item.batchId,
-              quantity: item.quantityAdded,
-            }
-          );
+          await axiosInstance.post(`/api/v1/slots/${item.slotId}/batches`, {
+            batchId: item.batchId,
+            quantity: item.quantityAdded,
+          });
           loadedCount += 1;
-          setItems((remainingItems) =>
-            remainingItems.filter(
-              (remainingItem) =>
-                remainingItem.slotId !== item.slotId ||
-                remainingItem.batchId !== item.batchId
-            )
-          );
         } catch (requestError: unknown) {
-          const progress =
+          const detail = getErrorMessage(requestError);
+          const progressMsg =
             loadedCount > 0
-              ? `Đã nạp thành công ${loadedCount} mục trước đó. `
-              : "";
+              ? `Đã nạp thành công ${loadedCount}/${totalToLoad} mục trước đó. `
+              : '';
           throw new Error(
-            `${progress}Không thể nạp lô ${item.batchCode} vào khay ${item.slotCode}: ${getErrorMessage(requestError)}`,
+            `${progressMsg}Lỗi tại khay ${item.slotCode} (lô ${item.batchCode}): ${detail}`,
             { cause: requestError }
           );
         }
       }
+
+      // Xóa các item đã hoàn thành
+      setItems([]);
       return true;
     } catch (requestError: unknown) {
       const message = getErrorMessage(requestError);
@@ -107,5 +104,5 @@ export function useRestockPlan() {
     }
   }
 
-  return { items, isSubmitting, error, addItem, completePlan, resetPlan };
+  return { items, isSubmitting, error, addItem, removeItem, completePlan, resetPlan };
 }

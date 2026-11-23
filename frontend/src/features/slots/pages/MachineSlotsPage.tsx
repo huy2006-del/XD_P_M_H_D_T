@@ -1,6 +1,6 @@
 
 import { useCallback, useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useLocation } from "react-router-dom";
 import axios from "axios";
 
 import MachineSlotGrid from "../components/MachineSlotGrid";
@@ -12,6 +12,9 @@ import "../slots.css";
 
 export default function MachineSlotsPage() {
   const { machineId } = useParams<{ machineId: string }>();
+  const location = useLocation();
+  const isOperator = location.pathname.startsWith("/operator");
+  const backUrl = isOperator ? "/operator/machines" : "/admin/machines";
 
   const [slots, setSlots] = useState<MachineSlot[]>([]);
   const [loading, setLoading] = useState(true);
@@ -52,7 +55,7 @@ export default function MachineSlotsPage() {
 
   return (
     <div className="fv-slots-page">
-      <Link to="/admin/machines" className="fv-slot-back">
+      <Link to={backUrl} className="fv-slot-back">
         ← Quay lại danh sách máy
       </Link>
 
