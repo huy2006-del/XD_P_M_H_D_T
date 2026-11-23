@@ -24,6 +24,9 @@ export interface FruitBatch {
   productName: string;
   quantityRemaining: number;
   expired: boolean;
+  supplier?: string;
+  quantityImported?: number;
+  unitCost?: number;
 }
 
 export interface RestockItem {

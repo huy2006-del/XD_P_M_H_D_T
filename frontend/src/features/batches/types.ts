@@ -21,3 +21,12 @@ export interface CreateBatchRequest {
   quantityImported: number;
   unitCost: number;
 }
+
+export interface BatchFilterParams {
+  productId?: number | null;
+  expired?: boolean | null;
+  expiringWithinDays?: number | null;
+  search?: string;
+  page?: number;
+  size?: number;
+}

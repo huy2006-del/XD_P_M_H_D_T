@@ -1,41 +1,28 @@
-import React, { useEffect, useMemo, useState } from "react";
-import axios from "axios";
-import axiosInstance from "../../../shared/api/axiosInstance";
-import type { PaginatedResponse } from "../../../shared/types/common.types";
-import type {
-  AddItemRequest,
-  FruitBatch,
-  MachineSlot,
-  RestockItem,
-} from "../types";
+import React, { useEffect, useMemo, useState } from 'react';
+import axios from 'axios';
+import { Trash2, Plus, AlertCircle, Info, Calendar } from 'lucide-react';
+import axiosInstance from '../../../shared/api/axiosInstance';
+import type { PaginatedResponse } from '../../../shared/types/common.types';
+import type { AddItemRequest, FruitBatch, MachineSlot, RestockItem } from '../types';
+import { formatDate } from '../../../shared/utils/dateUtils';
 
 interface Props {
   selectedSlot: MachineSlot;
   sessionItems: RestockItem[];
-  onAddItem: (
-    data: AddItemRequest,
-    slot: MachineSlot,
-    batch: FruitBatch
-  ) => Promise<void>;
-}
-
-function getErrorMessage(error: unknown): string {
-  if (axios.isAxiosError<{ message?: string }>(error)) {
-    return error.response?.data?.message ?? error.message;
-  }
-
-  return error instanceof Error ? error.message : "Không thể tải danh sách lô.";
+  onAddItem: (data: AddItemRequest, slot: MachineSlot, batch: FruitBatch) => Promise<void>;
+  onRemoveItem?: (slotId: number, batchId: number) => void;
 }
 
 export const StepRestockItems: React.FC<Props> = ({
   selectedSlot,
   sessionItems,
   onAddItem,
+  onRemoveItem,
 }) => {
   const [batches, setBatches] = useState<FruitBatch[]>([]);
-  const [selectedBatchId, setSelectedBatchId] = useState("");
+  const [selectedBatchId, setSelectedBatchId] = useState('');
   const [quantity, setQuantity] = useState(1);
-  const [errorMsg, setErrorMsg] = useState("");
+  const [errorMsg, setErrorMsg] = useState('');
   const [loadingBatches, setLoadingBatches] = useState(true);
   const [isAdding, setIsAdding] = useState(false);
 
@@ -43,7 +30,7 @@ export const StepRestockItems: React.FC<Props> = ({
     let active = true;
 
     axiosInstance
-      .get<PaginatedResponse<FruitBatch>>("/api/v1/batches", {
+      .get<PaginatedResponse<FruitBatch>>('/api/v1/batches', {
         params: {
           productId: selectedSlot.productId,
           expired: false,
@@ -52,19 +39,31 @@ export const StepRestockItems: React.FC<Props> = ({
         },
       })
       .then(({ data }) => {
-        if (active) {
-          setBatches(
-            data.content.filter(
-              (batch) =>
-                !batch.expired &&
-                batch.quantityRemaining > 0 &&
-                batch.productId === selectedSlot.productId
-            )
-          );
+        if (!active) return;
+        const list = Array.isArray(data?.content) ? data.content : [];
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        // Lọc nghiêm ngặt: không hết hạn, còn tồn kho, đúng sản phẩm khay
+        const validBatches = list.filter((b) => {
+          const isDateValid = new Date(b.expiryDate) > today;
+          return !b.expired && isDateValid && b.quantityRemaining > 0;
+        });
+
+        // Sắp xếp FEFO (First Expired, First Out)
+        validBatches.sort((a, b) => new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime());
+
+        setBatches(validBatches);
+        if (validBatches.length > 0) {
+          setSelectedBatchId(String(validBatches[0].id));
         }
       })
-      .catch((requestError: unknown) => {
-        if (active) setErrorMsg(getErrorMessage(requestError));
+      .catch((err: unknown) => {
+        if (!active) return;
+        const msg = axios.isAxiosError<{ message?: string }>(err)
+          ? err.response?.data?.message ?? err.message
+          : 'Không thể tải danh sách lô hàng phù hợp.';
+        setErrorMsg(msg);
       })
       .finally(() => {
         if (active) setLoadingBatches(false);
@@ -75,46 +74,45 @@ export const StepRestockItems: React.FC<Props> = ({
     };
   }, [selectedSlot.productId]);
 
-  const itemsForSlot = sessionItems.filter(
-    (item) => item.slotId === selectedSlot.slotId
-  );
-  const currentAdded = itemsForSlot.reduce(
-    (sum, item) => sum + item.quantityAdded,
-    0
-  );
-  const maxCanAdd = Math.max(
-    0,
-    selectedSlot.capacity - selectedSlot.currentStock - currentAdded
-  );
+  // Tính số lượng đã lên kế hoạch cho khay này
+  const itemsForSlot = sessionItems.filter((i) => i.slotId === selectedSlot.slotId);
+  const addedForSlot = itemsForSlot.reduce((sum, i) => sum + i.quantityAdded, 0);
+  const slotRemainingSpace = Math.max(0, selectedSlot.capacity - selectedSlot.currentStock - addedForSlot);
+
+  // Lô đang chọn
   const selectedBatch = useMemo(
-    () => batches.find((batch) => String(batch.id) === selectedBatchId) ?? null,
+    () => batches.find((b) => String(b.id) === selectedBatchId) ?? null,
     [batches, selectedBatchId]
   );
+
+  // Tính số lượng của lô đang chọn đã được phân bổ trong phiên này (cho mọi khay)
   const pendingForBatch = sessionItems
-    .filter((item) => item.batchId === selectedBatch?.id)
-    .reduce((sum, item) => sum + item.quantityAdded, 0);
-  const maxForSelectedBatch = Math.min(
-    maxCanAdd,
-    Math.max(0, (selectedBatch?.quantityRemaining ?? 0) - pendingForBatch)
-  );
+    .filter((i) => i.batchId === selectedBatch?.id)
+    .reduce((sum, i) => sum + i.quantityAdded, 0);
 
-  async function handleAdd() {
-    setErrorMsg("");
+  const batchAvailable = Math.max(0, (selectedBatch?.quantityRemaining ?? 0) - pendingForBatch);
+  const maxAllowed = Math.min(slotRemainingSpace, batchAvailable);
+
+  const handleAdd = async () => {
+    setErrorMsg('');
+
     if (!selectedBatch) {
-      setErrorMsg("Vui lòng chọn lô hàng.");
-      return;
-    }
-    if (!Number.isSafeInteger(quantity) || quantity <= 0) {
-      setErrorMsg("Số lượng phải là số nguyên lớn hơn 0.");
-      return;
-    }
-    if (quantity > maxForSelectedBatch) {
-      setErrorMsg(`Số lượng tối đa có thể thêm là ${maxForSelectedBatch}.`);
+      setErrorMsg('Vui lòng chọn một lô hàng còn hạn để nạp.');
       return;
     }
 
-    setIsAdding(true);
+    if (!Number.isSafeInteger(quantity) || quantity <= 0) {
+      setErrorMsg('Số lượng nạp phải là số nguyên dương lớn hơn 0.');
+      return;
+    }
+
+    if (quantity > maxAllowed) {
+      setErrorMsg(`Số lượng tối đa có thể thêm hiện tại là ${maxAllowed}.`);
+      return;
+    }
+
     try {
+      setIsAdding(true);
       await onAddItem(
         {
           slotId: selectedSlot.slotId,
@@ -125,132 +123,152 @@ export const StepRestockItems: React.FC<Props> = ({
         selectedBatch
       );
       setQuantity(1);
-      setSelectedBatchId("");
-    } catch (error: unknown) {
-      setErrorMsg(
-        error instanceof Error ? error.message : "Không thể thêm lô vào kế hoạch."
-      );
+    } catch (err: unknown) {
+      setErrorMsg(err instanceof Error ? err.message : 'Không thể thêm vào kế hoạch nạp.');
     } finally {
       setIsAdding(false);
     }
-  }
+  };
 
   return (
-    <div>
-      <h2 className="mb-4 text-lg font-semibold">
-        Bước 3: Lập kế hoạch nạp khay {selectedSlot.slotCode}
-      </h2>
-      <p className="mb-4 text-sm text-gray-600">
-        Hàng chỉ được ghi vào kho sau khi bạn xác nhận ở bước tiếp theo.
-      </p>
+    <div className="space-y-6">
+      {/* Header bước */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+        <div>
+          <h2 className="text-lg font-bold text-gray-900">
+            Bước 3: Lập kế hoạch nạp khay <span className="font-mono text-blue-600">{selectedSlot.slotCode}</span>
+          </h2>
+          <p className="text-sm text-gray-500">
+            Sản phẩm: <strong>{selectedSlot.productName || 'Chưa gán'}</strong> · Sức chứa còn trống:{' '}
+            <strong className="text-emerald-700">{slotRemainingSpace} sản phẩm</strong>
+          </p>
+        </div>
+      </div>
 
       {errorMsg && (
-        <p role="alert" className="mb-4 rounded bg-red-100 p-3 text-sm text-red-700">
-          {errorMsg}
-        </p>
+        <div role="alert" className="p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg flex items-start gap-2">
+          <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+          <span>{errorMsg}</span>
+        </div>
       )}
 
-      <div className="mb-6 rounded-lg border bg-gray-50 p-4">
+      {/* Box nhập lô */}
+      <div className="p-5 bg-gray-50 rounded-xl border border-gray-200/80 space-y-4">
         {loadingBatches ? (
-          <p>Đang tải lô hàng...</p>
-        ) : (
-          <div className="grid grid-cols-1 items-end gap-4 md:grid-cols-3">
+          <div className="py-4 text-center text-sm text-gray-500">Đang tìm kiếm các lô hàng hợp lệ trong kho...</div>
+        ) : batches.length === 0 ? (
+          <div className="p-4 bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-lg flex items-start gap-2">
+            <Info className="w-5 h-5 shrink-0 text-amber-600 mt-0.5" />
             <div>
-              <label
-                className="mb-1 block text-sm font-medium"
-                htmlFor="restock-batch"
-              >
-                Chọn lô hàng
+              <p className="font-bold">Không tìm thấy lô hàng khả dụng cho sản phẩm này!</p>
+              <p className="text-xs text-amber-700 mt-1">
+                Tất cả các lô của sản phẩm này đã hết hạn hoặc đã được xuất hết trong kho. Vui lòng vào trang Quản lý Lô Hàng để nhập lô mới trước khi tiếp hàng.
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+            {/* Dropdown chọn lô */}
+            <div className="md:col-span-2 space-y-1">
+              <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider">
+                Chọn Lô Hàng (Ưu tiên FEFO - Hạn gần nhất)
               </label>
               <select
-                id="restock-batch"
-                className="w-full rounded border p-2"
+                className="w-full border border-gray-300 rounded-lg p-2.5 text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
                 value={selectedBatchId}
-                onChange={(event) => {
-                  setSelectedBatchId(event.target.value);
+                onChange={(e) => {
+                  setSelectedBatchId(e.target.value);
                   setQuantity(1);
+                  setErrorMsg('');
                 }}
-                disabled={batches.length === 0}
               >
-                <option value="">-- Chọn lô --</option>
-                {batches.map((batch) => (
-                  <option key={batch.id} value={batch.id}>
-                    {batch.batchCode} · HSD {batch.expiryDate} · còn{" "}
-                    {batch.quantityRemaining}
+                {batches.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.batchCode} · HSD: {formatDate(b.expiryDate)} · Tồn kho: {b.quantityRemaining} quả · {b.supplier || 'NCC'}
                   </option>
                 ))}
               </select>
-              {batches.length === 0 && (
-                <p className="mt-1 text-xs text-gray-500">
-                  Không có lô còn hạn và tồn kho cho sản phẩm của khay.
-                </p>
+              {selectedBatch && (
+                <div className="flex items-center gap-2 text-xs text-gray-500 pt-1">
+                  <Calendar className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>HSD: <strong>{formatDate(selectedBatch.expiryDate)}</strong></span>
+                  <span>•</span>
+                  <span>Khả dụng trong kho: <strong>{batchAvailable} quả</strong></span>
+                </div>
               )}
             </div>
 
-            <div>
-              <label
-                className="mb-1 block text-sm font-medium"
-                htmlFor="restock-quantity"
-              >
-                Số lượng (tối đa {maxForSelectedBatch})
+            {/* Số lượng */}
+            <div className="space-y-1">
+              <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider">
+                Số lượng nạp (Tối đa: {maxAllowed})
               </label>
-              <input
-                id="restock-quantity"
-                type="number"
-                min={1}
-                max={maxForSelectedBatch}
-                step={1}
-                className="w-full rounded border p-2"
-                value={quantity}
-                onChange={(event) => setQuantity(Number(event.target.value))}
-                disabled={!selectedBatch || maxForSelectedBatch === 0}
-              />
+              <div className="flex gap-2">
+                <input
+                  type="number"
+                  min={1}
+                  max={maxAllowed}
+                  value={quantity}
+                  disabled={maxAllowed <= 0}
+                  onChange={(e) => setQuantity(Number(e.target.value))}
+                  className="w-full border border-gray-300 rounded-lg p-2.5 text-sm font-bold text-center focus:ring-2 focus:ring-blue-500 focus:outline-none disabled:bg-gray-100"
+                />
+                <button
+                  type="button"
+                  onClick={handleAdd}
+                  disabled={isAdding || maxAllowed <= 0}
+                  className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-bold transition-all disabled:opacity-50 cursor-pointer whitespace-nowrap shadow-xs"
+                >
+                  <Plus className="w-4 h-4" />
+                  {isAdding ? 'Đang thêm...' : 'Thêm'}
+                </button>
+              </div>
             </div>
-
-            <button
-              type="button"
-              onClick={() => void handleAdd()}
-              disabled={
-                isAdding ||
-                loadingBatches ||
-                !selectedBatch ||
-                maxForSelectedBatch === 0
-              }
-              className="rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-50"
-            >
-              {isAdding ? "Đang thêm..." : "Thêm vào kế hoạch"}
-            </button>
           </div>
         )}
       </div>
 
-      <div className="mt-6">
-        <h3 className="mb-2 font-medium">Kế hoạch nạp hàng</h3>
+      {/* Danh sách các mục đã lên kế hoạch trong phiên */}
+      <div>
+        <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wider mb-2">
+          Kế hoạch tiếp hàng phiên này ({sessionItems.length} mục)
+        </h3>
+
         {sessionItems.length === 0 ? (
-          <p className="text-sm italic text-gray-500">Chưa có mục nào.</p>
+          <div className="border border-dashed border-gray-200 rounded-xl p-8 text-center text-sm text-gray-400">
+            Chưa có mục nào được thêm vào kế hoạch. Hãy chọn lô và số lượng ở trên rồi bấm &ldquo;Thêm&rdquo;.
+          </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full border text-left text-sm">
-              <thead className="bg-gray-100">
+          <div className="overflow-x-auto bg-white rounded-xl border border-gray-200/80">
+            <table className="min-w-full text-left border-collapse text-sm">
+              <thead className="bg-gray-50 border-b border-gray-200 text-gray-600 font-semibold text-xs uppercase">
                 <tr>
-                  <th className="border p-2">Khay</th>
-                  <th className="border p-2">Sản phẩm</th>
-                  <th className="border p-2">Lô hàng</th>
-                  <th className="border p-2 text-right">Số lượng</th>
+                  <th className="p-3">Khay</th>
+                  <th className="p-3">Sản Phẩm</th>
+                  <th className="p-3">Mã Lô</th>
+                  <th className="p-3 text-right">Số Lượng Nạp</th>
+                  {onRemoveItem && <th className="p-3 text-center">Thao Tác</th>}
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="divide-y divide-gray-100 text-gray-700">
                 {sessionItems.map((item) => (
-                  <tr
-                    key={`${item.slotId}-${item.batchId}`}
-                    className="border-b"
-                  >
-                    <td className="border p-2 font-bold">{item.slotCode}</td>
-                    <td className="border p-2">{item.productName}</td>
-                    <td className="border p-2">{item.batchCode}</td>
-                    <td className="border p-2 text-right font-bold text-green-600">
-                      +{item.quantityAdded}
-                    </td>
+                  <tr key={`${item.slotId}-${item.batchId}`} className="hover:bg-gray-50/60">
+                    <td className="p-3 font-mono font-bold text-blue-600">{item.slotCode}</td>
+                    <td className="p-3 font-medium text-gray-900">{item.productName}</td>
+                    <td className="p-3 font-mono text-xs">{item.batchCode}</td>
+                    <td className="p-3 text-right font-bold text-emerald-700">+{item.quantityAdded}</td>
+                    {onRemoveItem && (
+                      <td className="p-3 text-center">
+                        <button
+                          type="button"
+                          onClick={() => onRemoveItem(item.slotId, item.batchId)}
+                          className="text-red-500 hover:text-red-700 p-1 rounded-md hover:bg-red-50 transition-colors"
+                          title="Xóa mục này"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>

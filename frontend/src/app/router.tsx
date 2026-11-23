@@ -18,6 +18,11 @@ import { OrderManagementPage } from "../features/orders/pages/OrderManagementPag
 
 import { SpoilageReportPage } from "../features/reports/pages/SpoilageReportPage";
 import { AuditLogsPage } from "../features/audit/pages/AuditLogsPage";
+import { BatchManagementPage } from "../features/batches/pages/BatchManagementPage";
+import { RestockWizardPage } from "../features/restock/pages/RestockWizardPage";
+import { RestockHistoryPage } from "../features/restock/pages/RestockHistoryPage";
+import { OperatorMachinesPage } from "../features/slots/pages/OperatorMachinesPage";
+import { OperatorAlertsPage } from "../features/alerts/pages/OperatorAlertsPage";
 
 const FleetDashboard = lazy(
   () => import("../features/fleet/pages/FleetDashboard.jsx")
@@ -72,6 +77,18 @@ export const router = createBrowserRouter([
                 element: <ProductListPage />,
               },
               {
+                path: "batches",
+                element: <BatchManagementPage />,
+              },
+              {
+                path: "restock",
+                element: <RestockWizardPage />,
+              },
+              {
+                path: "restock/history",
+                element: <RestockHistoryPage />,
+              },
+              {
                 path: "reports/spoilage",
                 element: <SpoilageReportPage />,
               },
@@ -108,11 +125,39 @@ export const router = createBrowserRouter([
             children: [
               {
                 index: true,
-                element: <Navigate to="dashboard" replace />,
+                element: <Navigate to="batches" replace />,
               },
               {
                 path: "dashboard",
-                element: <div>Operator Dashboard</div>,
+                element: <Navigate to="batches" replace />,
+              },
+              {
+                path: "batches",
+                element: <BatchManagementPage />,
+              },
+              {
+                path: "restock",
+                element: <RestockWizardPage />,
+              },
+              {
+                path: "restock/history",
+                element: <RestockHistoryPage />,
+              },
+              {
+                path: "machines",
+                element: <OperatorMachinesPage />,
+              },
+              {
+                path: "machines/:machineId/slots",
+                element: <MachineSlotsPage />,
+              },
+              {
+                path: "reports/spoilage",
+                element: <SpoilageReportPage />,
+              },
+              {
+                path: "alerts",
+                element: <OperatorAlertsPage />,
               },
             ],
           },

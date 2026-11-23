@@ -7,16 +7,22 @@ import { StepSelectSlot } from '../components/StepSelectSlot';
 import { StepRestockItems } from '../components/StepRestockItems';
 import { StepConfirmation } from '../components/StepConfirmation';
 import type { Machine, MachineSlot } from '../types';
+import { ArrowLeft, ArrowRight, Check, History, Layers } from 'lucide-react';
 
-const STEPS = ['Chọn máy', 'Chọn khay', 'Lập kế hoạch', 'Xác nhận nạp'];
+const STEPS = [
+  { title: 'Chọn máy', desc: 'Chọn máy cần tiếp hàng' },
+  { title: 'Chọn khay', desc: 'Sơ đồ sức chứa khay' },
+  { title: 'Lập kế hoạch', desc: 'Chọn lô hàng & số lượng' },
+  { title: 'Xác nhận nạp', desc: 'Cập nhật kho & hoàn tất' },
+];
 
 export const RestockWizardPage: React.FC = () => {
   const navigate = useNavigate();
   const [currentStep, setCurrentStep] = useState(0);
   const [selectedMachine, setSelectedMachine] = useState<Machine | null>(null);
   const [selectedSlot, setSelectedSlot] = useState<MachineSlot | null>(null);
-  
-  const { items, isSubmitting, error, addItem, completePlan, resetPlan } = useRestockPlan();
+
+  const { items, isSubmitting, error, addItem, removeItem, completePlan, resetPlan } = useRestockPlan();
 
   const handleMachineSelect = (machine: Machine) => {
     resetPlan();
@@ -30,79 +36,144 @@ export const RestockWizardPage: React.FC = () => {
     setCurrentStep(2);
   };
 
-  const handleComplete = async () => {
-    const completed = await completePlan();
+  const handleComplete = async (notes?: string) => {
+    const completed = await completePlan(notes);
     if (!completed) return;
 
-    toast.success('Đã nạp hàng thành công.');
-    navigate('/operator', { replace: true });
+    toast.success('Đã nạp hàng thành công! Tồn kho khay đã được cập nhật.');
+    navigate('/operator/restock/history', { replace: true });
   };
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
-      <h1 className="text-2xl font-bold mb-6 text-gray-800">Nạp hàng vào máy</h1>
-      
-      {/* Thanh Trạng Thái Steps */}
-      <div className="flex justify-between mb-8 relative">
-        <div className="absolute top-1/2 left-0 w-full h-1 bg-gray-200 -z-10 transform -translate-y-1/2"></div>
-        {STEPS.map((step, idx) => (
-          <div key={idx} className="flex flex-col items-center bg-white px-2">
-            <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold border-2 
-              ${idx === currentStep ? 'bg-blue-600 text-white border-blue-600' : 
-                idx < currentStep ? 'bg-green-500 text-white border-green-500' : 'bg-white text-gray-400 border-gray-300'}`}>
-              {idx < currentStep ? '✓' : idx + 1}
-            </div>
-            <span className={`text-xs mt-2 font-medium ${idx === currentStep ? 'text-blue-600' : 'text-gray-500'}`}>{step}</span>
-          </div>
-        ))}
+    <div className="max-w-5xl mx-auto space-y-6">
+      {/* Header và nút điều hướng lịch sử */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Tiếp Hàng Vào Máy Bán (Restock Wizard)</h1>
+          <p className="text-sm text-gray-500 mt-0.5">
+            Quy trình tiếp hàng 4 bước tuân thủ FEFO và cập nhật thời gian thực.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => navigate('/operator/restock/history')}
+          className="inline-flex items-center gap-1.5 px-3.5 py-2 border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 text-sm font-medium rounded-lg shadow-xs transition-colors cursor-pointer"
+        >
+          <History className="w-4 h-4 text-gray-500" />
+          <span>Xem Lịch Sử Nạp</span>
+        </button>
       </div>
 
-      {error && <div className="bg-red-100 text-red-700 p-4 rounded mb-6">{error}</div>}
+      {/* Thanh tiến trình Steps */}
+      <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-xs">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 relative">
+          {STEPS.map((s, idx) => {
+            const isCompleted = idx < currentStep;
+            const isCurrent = idx === currentStep;
 
-      {/* Nội dung từng bước */}
-      <div className="bg-white p-6 rounded-xl shadow-sm border min-h-[400px]">
+            return (
+              <div key={idx} className="flex items-center gap-3 relative z-10">
+                <div
+                  className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm shrink-0 transition-colors ${
+                    isCurrent
+                      ? 'bg-blue-600 text-white shadow-md'
+                      : isCompleted
+                        ? 'bg-emerald-600 text-white'
+                        : 'bg-gray-100 text-gray-400 border border-gray-200'
+                  }`}
+                >
+                  {isCompleted ? <Check className="w-4 h-4" /> : idx + 1}
+                </div>
+                <div className="overflow-hidden">
+                  <p className={`text-xs font-bold leading-tight ${isCurrent ? 'text-blue-600' : 'text-gray-700'}`}>
+                    {s.title}
+                  </p>
+                  <p className="text-[11px] text-gray-400 truncate">{s.desc}</p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Thông tin ngữ cảnh máy & khay đang chọn */}
+      {selectedMachine && currentStep > 0 && (
+        <div className="p-3.5 bg-blue-50/70 border border-blue-200/60 rounded-xl flex items-center justify-between text-xs text-blue-900">
+          <div className="flex items-center gap-2">
+            <span>Đang tiếp hàng cho: <strong>{selectedMachine.name}</strong> ({selectedMachine.serialNumber})</span>
+            {selectedSlot && (
+              <>
+                <span>•</span>
+                <span>Khay: <strong className="font-mono text-blue-700">{selectedSlot.slotCode}</strong> ({selectedSlot.productName})</span>
+              </>
+            )}
+          </div>
+
+          {currentStep === 2 && (
+            <button
+              type="button"
+              onClick={() => setCurrentStep(1)}
+              className="text-blue-700 font-bold hover:underline inline-flex items-center gap-1 cursor-pointer"
+            >
+              <Layers className="w-3.5 h-3.5" />
+              Đổi khay khác
+            </button>
+          )}
+        </div>
+      )}
+
+      {error && (
+        <div role="alert" className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl text-sm font-medium">
+          {error}
+        </div>
+      )}
+
+      {/* Khung nội dung chính */}
+      <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 min-h-[420px]">
         {currentStep === 0 && <StepSelectMachine onSelect={handleMachineSelect} />}
-        
+
         {currentStep === 1 && selectedMachine && (
           <StepSelectSlot machineId={selectedMachine.id} onSlotSelected={handleSlotSelect} />
         )}
-        
+
         {currentStep === 2 && selectedSlot && (
-          <StepRestockItems 
-            selectedSlot={selectedSlot} 
-            sessionItems={items} 
+          <StepRestockItems
+            selectedSlot={selectedSlot}
+            sessionItems={items}
             onAddItem={async (data, slot, batch) => {
               addItem(data, slot, batch);
-            }} 
+            }}
+            onRemoveItem={removeItem}
           />
         )}
-        
+
         {currentStep === 3 && (
-          <StepConfirmation
-            items={items}
-            isSubmitting={isSubmitting}
-            onComplete={handleComplete}
-          />
+          <StepConfirmation items={items} isSubmitting={isSubmitting} onComplete={handleComplete} />
         )}
       </div>
 
-      {/* Nút điều hướng chung */}
-      <div className="flex justify-between mt-6">
-        <button 
-          disabled={currentStep === 0}
-          onClick={() => setCurrentStep(prev => prev - 1)}
-          className="px-6 py-2 border rounded text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+      {/* Điều hướng chung */}
+      <div className="flex justify-between items-center pt-2">
+        <button
+          type="button"
+          disabled={currentStep === 0 || isSubmitting}
+          onClick={() => setCurrentStep((prev) => prev - 1)}
+          className="inline-flex items-center gap-1.5 px-5 py-2.5 border border-gray-300 rounded-xl text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
         >
-          Quay lại
+          <ArrowLeft className="w-4 h-4" />
+          <span>Quay lại</span>
         </button>
-        
+
         {currentStep === 2 && (
-          <button 
+          <button
+            type="button"
             onClick={() => setCurrentStep(3)}
             disabled={items.length === 0}
-            className="px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+            className="inline-flex items-center gap-2 px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-bold shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer transition-all"
           >
-            Xem lại kế hoạch
+            <span>Xem lại kế hoạch & Xác nhận ({items.length} mục)</span>
+            <ArrowRight className="w-4 h-4" />
           </button>
         )}
       </div>

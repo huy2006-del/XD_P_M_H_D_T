@@ -11,8 +11,13 @@ export const ROUTES = {
   },
   OPERATOR: {
     ROOT: '/operator',
-    MACHINES: '/operator/machines',
+    DASHBOARD: '/operator/dashboard',
+    BATCHES: '/operator/batches',
     RESTOCK: '/operator/restock',
+    RESTOCK_HISTORY: '/operator/restock/history',
+    MACHINES: '/operator/machines',
+    SLOTS: '/operator/machines/:machineId/slots',
+    REPORTS_SPOILAGE: '/operator/reports/spoilage',
     ALERTS: '/operator/alerts',
   },
 } as const;
