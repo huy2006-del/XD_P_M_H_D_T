@@ -7,7 +7,7 @@ export interface AnalyticsOverviewDto {
   thisMonthRevenue: number;
   successOrderCount: number;
   failedOrderCount: number;
-  inventoryFillRate: number;
+  inventoryFillRate: number | null;
 }
 
 export interface DailyRevenueDto {
@@ -49,6 +49,13 @@ export interface DashboardData {
   partialErrors: string[];
 }
 
+interface DashboardOrder {
+  totalAmount: number | string;
+  paymentStatus: string;
+  dispenseStatus: string;
+  createdAt: string;
+}
+
 function formatShortDate(isoDate: string): string {
   const parts = isoDate.split('-');
   if (parts.length === 3) {
@@ -56,43 +63,51 @@ function formatShortDate(isoDate: string): string {
   }
   return isoDate;
 }
+function localDateKey(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
 
 export const adminDashboardService = {
   getDashboardData: async (revenueDays = 7): Promise<DashboardData> => {
     const partialErrors: string[] = [];
 
-    const [overviewRes, revenueRes, machinesRes, alertsRes, healthRes] =
+    const [ordersRes, machinesRes, alertsRes, healthRes] =
       await Promise.allSettled([
-        axiosInstance.get<AnalyticsOverviewDto>('/api/v1/analytics/overview'),
-        axiosInstance.get<DailyRevenueDto[]>('/api/v1/analytics/revenue-chart', {
-          params: { range: revenueDays },
-        }),
+        axiosInstance.get<DashboardOrder[]>('/api/v1/orders'),
         axiosInstance.get<MachineDetailDto[]>('/api/v1/machines'),
         alertService.getAlerts(),
         axiosInstance.get<ColdChainHealthReportDto>('/api/v1/reports/coldchain-health'),
       ]);
 
-    const overview =
-      overviewRes.status === 'fulfilled'
-        ? {
-            todayRevenue: Number(overviewRes.value.data?.todayRevenue ?? 0),
-            thisMonthRevenue: Number(overviewRes.value.data?.thisMonthRevenue ?? 0),
-            successOrderCount: Number(overviewRes.value.data?.successOrderCount ?? 0),
-            failedOrderCount: Number(overviewRes.value.data?.failedOrderCount ?? 0),
-            inventoryFillRate: Number(overviewRes.value.data?.inventoryFillRate ?? 0),
-          }
-        : (partialErrors.push('Không tải được thống kê doanh thu (/api/v1/analytics/overview).'),
-          null);
-
-    const revenueChart =
-      revenueRes.status === 'fulfilled' && Array.isArray(revenueRes.value.data)
-        ? revenueRes.value.data.map((item) => ({
-            date: item.date,
-            label: formatShortDate(item.date),
-            revenue: Number(item.revenue ?? 0),
-          }))
-        : (partialErrors.push('Không tải được biểu đồ doanh thu (/api/v1/analytics/revenue-chart).'),
-          []);
+    const orders = ordersRes.status === 'fulfilled' && Array.isArray(ordersRes.value.data)
+      ? ordersRes.value.data
+      : (partialErrors.push('Không tải được danh sách đơn hàng (/api/v1/orders).'), []);
+    const paidOrders = orders.filter((order) =>
+      order.paymentStatus === 'SUCCESS' && ['COMPLETED', 'DISPENSED'].includes(order.dispenseStatus)
+    );
+    const failedOrders = orders.filter((order) => ['FAILED', 'JAMMED', 'REFUNDED'].includes(order.paymentStatus) || ['JAMMED', 'REFUNDED'].includes(order.dispenseStatus));
+    const now = new Date();
+    const today = localDateKey(now);
+    const month = today.slice(0, 7);
+    const revenueFor = (list: DashboardOrder[]) => list.reduce((sum, order) => sum + Number(order.totalAmount || 0), 0);
+    const overview: AnalyticsOverviewDto | null = ordersRes.status === 'fulfilled' ? {
+      todayRevenue: revenueFor(paidOrders.filter((order) => order.createdAt.slice(0, 10) === today)),
+      thisMonthRevenue: revenueFor(paidOrders.filter((order) => order.createdAt.slice(0, 7) === month)),
+      successOrderCount: orders.filter((order) => ['COMPLETED', 'DISPENSED'].includes(order.dispenseStatus)).length,
+      failedOrderCount: failedOrders.length,
+      inventoryFillRate: null,
+    } : null;
+    const revenueByDate = new Map<string, number>();
+    for (let dayOffset = revenueDays - 1; dayOffset >= 0; dayOffset -= 1) {
+      const date = new Date(now);
+      date.setDate(date.getDate() - dayOffset);
+      revenueByDate.set(localDateKey(date), 0);
+    }
+    for (const order of paidOrders) {
+      const date = order.createdAt.slice(0, 10);
+      if (revenueByDate.has(date)) revenueByDate.set(date, (revenueByDate.get(date) ?? 0) + Number(order.totalAmount || 0));
+    }
+    const revenueChart = [...revenueByDate].map(([date, revenue]) => ({ date, label: formatShortDate(date), revenue }));
 
     const machines =
       machinesRes.status === 'fulfilled' && Array.isArray(machinesRes.value.data)

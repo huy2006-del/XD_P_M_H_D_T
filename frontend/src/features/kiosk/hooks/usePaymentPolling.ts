@@ -30,7 +30,7 @@ export const usePaymentPolling = (
     const pollingInterval = setInterval(async () => {
       try {
         const data = await kioskService.getOrderStatus(orderId);
-        if (isMounted && data.status === 'PAID') {
+        if (isMounted && data.paymentStatus === 'SUCCESS') {
           clearInterval(pollingInterval);
           clearInterval(timerInterval);
           onPaid(); // Nhận được tiền -> Gọi callback thành công

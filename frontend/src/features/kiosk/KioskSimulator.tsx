@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { ShoppingCart, X, CheckCircle, RefreshCw, Search, Plus, Minus, Trash2, Tag, CreditCard, PackageOpen } from 'lucide-react';
-import { Client } from '@stomp/stompjs';
 import { kioskService } from './services/kioskService';
 import type { MachineSlotDTO, OrderResponse, MachineStatusDTO, CreateOrderRequest } from './types/kiosk';
 
@@ -26,9 +25,9 @@ export default function KioskSimulator({ machineId = 1 }: Props) {
   
   // --- STATE THANH TOÁN & HOÀN TẤT ---
   const [currentOrder, setCurrentOrder] = useState<OrderResponse | null>(null);
-  const [paymentStatus, setPaymentStatus] = useState<'IDLE' | 'PENDING' | 'SUCCESS' | 'FAILED' | 'EXPIRED' | 'DISPENSING'>('IDLE');
+  const [paymentStatus, setPaymentStatus] = useState<'IDLE' | 'PENDING' | 'SUCCESS' | 'FAILED' | 'EXPIRED' | 'DISPENSING' | 'JAMMED'>('IDLE');
   
-  const [timeLeft, setTimeLeft] = useState<number>(300);
+  const [timeLeft, setTimeLeft] = useState<number>(60);
   const [resetTimer, setResetTimer] = useState<number>(5);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const resetTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -45,8 +44,8 @@ export default function KioskSimulator({ machineId = 1 }: Props) {
       setSlots(slotsData);
     } catch (error: unknown) {
       console.error('Lỗi kết nối Server:', error);
-      // Giả lập trạng thái khi lỗi mạng để vẫn có thể demo
-      setMachineStatus({ machineId, status: 'OFFLINE', temperature: 0 });
+      setMachineStatus(null);
+      setSlots([]);
     } finally {
       setLoading(false);
     }
@@ -95,12 +94,17 @@ export default function KioskSimulator({ machineId = 1 }: Props) {
     try {
       const payload: CreateOrderRequest = {
         machineId,
-        items: [...cart.entries()].map(([slotId, quantity]) => ({ slotId, quantity }))
+        items: [...cart.entries()].flatMap(([slotId, quantity]) => {
+          const slot = slots.find((item) => item.slotId === slotId);
+          if (!slot?.productId) return [];
+          return [{ slotId, productId: slot.productId, slotNumber: slot.slotId, quantity, unitPrice: slot.price }];
+        }),
       };
+      if (!payload.items.length) throw new Error('Giỏ hàng không còn sản phẩm hợp lệ.');
       const order = await kioskService.createOrder(payload);
       setCurrentOrder(order);
       setPaymentStatus('PENDING');
-      setTimeLeft(300);
+      setTimeLeft(60);
     } catch (error: unknown) {
       console.error(error);
       alert('Không thể tạo đơn hàng. Vui lòng kiểm tra lại kết nối mạng.');
@@ -109,49 +113,46 @@ export default function KioskSimulator({ machineId = 1 }: Props) {
     }
   };
 
-  // 4. Lắng nghe WebSocket kết quả thanh toán
+  // Backend hiện cung cấp GET /orders/{id}; polling tới khi có kết quả thanh toán và nhả hàng.
   useEffect(() => {
-    if (!currentOrder || paymentStatus !== 'PENDING') return;
+    if (!currentOrder || !['PENDING', 'SUCCESS', 'EXPIRED'].includes(paymentStatus)) return;
+    const orderId = currentOrder.orderId;
 
-    const client = new Client({
-      brokerURL: 'ws://localhost:8080/ws-endpoint',
-      onConnect: () => {
-        client.subscribe(`/topic/orders/${currentOrder.orderId}`, (msg) => {
-          const body = JSON.parse(msg.body);
-          if (body.status === 'PAID') setPaymentStatus('SUCCESS');
-          else if (['FAILED', 'CANCELLED'].includes(body.status)) setPaymentStatus('FAILED');
+    if (paymentStatus === 'PENDING') {
+      timerRef.current = setInterval(() => {
+        setTimeLeft((prev) => {
+          if (prev <= 1) {
+            setPaymentStatus('EXPIRED');
+            return 0;
+          }
+          return prev - 1;
         });
-      }
-    });
-    client.activate();
+      }, 1000);
+    }
 
-    timerRef.current = setInterval(() => {
-      setTimeLeft(prev => {
-        if (prev <= 1) {
-          kioskService.cancelOrder(currentOrder.orderId).catch(() => {});
-          setPaymentStatus('EXPIRED');
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    const polling = setInterval(async () => {
+    let active = true;
+    const checkStatus = async () => {
       try {
-        const { status } = await kioskService.getOrderStatus(currentOrder.orderId);
-        if (status === 'PAID') setPaymentStatus('SUCCESS');
-        if (status === 'FAILED') setPaymentStatus('FAILED');
-      } catch {
-        // silent polling
+        const latest = await kioskService.getOrderStatus(orderId);
+        if (!active) return;
+        setCurrentOrder(latest);
+        if (latest.paymentStatus === 'SUCCESS' && latest.dispenseStatus === 'COMPLETED') setPaymentStatus('DISPENSING');
+        else if (latest.paymentStatus === 'SUCCESS') setPaymentStatus('SUCCESS');
+        else if (latest.paymentStatus === 'FAILED') setPaymentStatus('FAILED');
+        else if (latest.dispenseStatus === 'JAMMED') setPaymentStatus('JAMMED');
+      } catch (error) {
+        console.error('Không thể cập nhật trạng thái đơn hàng:', error);
       }
-    }, 3000);
+    };
+    void checkStatus();
+    const polling = setInterval(checkStatus, 2000);
 
     return () => {
-      client.deactivate();
+      active = false;
       if (timerRef.current) clearInterval(timerRef.current);
       clearInterval(polling);
     };
-  }, [currentOrder, paymentStatus]);
+  }, [currentOrder?.orderId, paymentStatus]);
 
   // HÀM RESET
   const handleResetKiosk = useCallback(() => {
@@ -163,15 +164,8 @@ export default function KioskSimulator({ machineId = 1 }: Props) {
 
   // 5. Xử lý màn hình Xuất hàng (Dispensing) sau khi SUCCESS
   useEffect(() => {
-    if (paymentStatus === 'SUCCESS') {
-      const timeout = setTimeout(() => {
-        setPaymentStatus('DISPENSING');
-        setResetTimer(5); 
-      }, 1500);
-      return () => clearTimeout(timeout);
-    }
-
     if (paymentStatus === 'DISPENSING') {
+      setResetTimer(5);
       resetTimerRef.current = setInterval(() => {
         setResetTimer((prev) => {
           if (prev <= 1) {
@@ -191,16 +185,14 @@ export default function KioskSimulator({ machineId = 1 }: Props) {
   // --- RENDER GIAO DIỆN ---
   if (loading) return <div className="h-screen w-full bg-white flex items-center justify-center"><RefreshCw className="animate-spin text-emerald-600 w-16 h-16"/></div>;
   
-  /*
   if (machineStatus?.status !== 'ONLINE') return (
     <div className="h-screen w-full bg-gray-50 flex flex-col items-center justify-center p-6 text-center">
-      <AlertTriangle className="w-32 h-32 text-red-500 mb-6 animate-pulse" />
-      <h2 className="text-5xl font-black text-gray-800 mb-4">HỆ THỐNG ĐANG BẢO TRÌ</h2>
-      <p className="text-gray-500 text-2xl mb-8">Thiết bị đang ngắt kết nối hoặc gặp sự cố. Vui lòng quay lại sau.</p>
+      <div className="mb-6 text-6xl" role="img" aria-label="Cảnh báo">⚠️</div>
+      <h2 className="text-3xl md:text-5xl font-black text-gray-800 mb-4">TẠM NGƯNG PHỤC VỤ VÌ AN TOÀN THỰC PHẨM</h2>
+      <p className="text-gray-500 text-xl mb-8">Máy đang {machineStatus?.status ?? 'không kết nối'}. Hệ thống tạm khóa để bảo vệ sản phẩm. Vui lòng quay lại sau.</p>
       <button onClick={fetchMachineData} className="px-10 py-4 bg-emerald-600 text-white text-xl font-bold rounded-2xl shadow-lg">Khởi động lại</button>
     </div>
   );
-  */
 
   const filteredSlots = slots.filter(s => s.productName.toLowerCase().includes(searchQuery.toLowerCase()));
 
@@ -376,18 +368,16 @@ export default function KioskSimulator({ machineId = 1 }: Props) {
               </div>
             )}
 
-            {(paymentStatus === 'FAILED' || paymentStatus === 'EXPIRED') && (
+            {(paymentStatus === 'FAILED' || paymentStatus === 'EXPIRED' || paymentStatus === 'JAMMED') && (
               <div className="py-12">
                 <div className="w-32 h-32 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-8">
                   <X className="w-16 h-16 text-red-500" />
                 </div>
                 <h2 className="text-4xl font-black text-gray-800 mb-4">
-                  {paymentStatus === 'EXPIRED' ? 'Hết thời gian quét mã' : 'Giao dịch thất bại'}
+                  {paymentStatus === 'EXPIRED' ? 'Hết thời gian chờ thanh toán' : paymentStatus === 'JAMMED' ? 'Máy gặp sự cố khi nhả hàng' : 'Giao dịch thất bại'}
                 </h2>
-                <p className="text-gray-500 text-xl mb-10">Vui lòng thử lại hoặc chọn mặt hàng khác.</p>
-                <button onClick={handleResetKiosk} className="w-full py-4 bg-gray-800 text-white rounded-2xl font-black text-xl shadow-lg">
-                  LÀM LẠI TỪ ĐẦU
-                </button>
+                <p className="text-gray-500 text-xl mb-10">{paymentStatus === 'JAMMED' && currentOrder?.refundVoucherCode ? `Mã voucher hỗ trợ: ${currentOrder.refundVoucherCode}` : paymentStatus === 'EXPIRED' ? 'Đã hết thời gian chờ trên màn hình. Backend chưa có API hủy/hết hạn đơn; vui lòng xác nhận trạng thái đơn với nhân viên trước khi thanh toán lại.' : 'Vui lòng thử lại hoặc chọn mặt hàng khác.'}</p>
+                {paymentStatus !== 'EXPIRED' && <button onClick={handleResetKiosk} className="w-full py-4 bg-gray-800 text-white rounded-2xl font-black text-xl shadow-lg">LÀM LẠI TỪ ĐẦU</button>}
               </div>
             )}
             

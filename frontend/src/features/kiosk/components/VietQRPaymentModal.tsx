@@ -5,18 +5,14 @@ interface Props {
   orderId: string;
   amount: number;
   content: string;
+  qrCodeUrl: string;
   onPaid: () => void;
   onCancel: () => void;
 }
 
-export const VietQRPaymentModal: React.FC<Props> = ({ orderId, amount, content, onPaid, onCancel }) => {
+export const VietQRPaymentModal: React.FC<Props> = ({ orderId, amount, content, qrCodeUrl, onPaid, onCancel }) => {
   // Lấy ra số giây còn lại từ Hook
   const { timeLeft } = usePaymentPolling(orderId, onPaid, onCancel);
-
-  // Link API tạo mã QR động của VietQR (Thay BIN ngân hàng và STK thật của hệ thống vào đây)
-  const bankBin = "970415"; // Ví dụ: Vietinbank
-  const bankAccount = "0123456789";
-  const qrUrl = `https://img.vietqr.io/image/${bankBin}-${bankAccount}-compact2.png?amount=${amount}&addInfo=${encodeURIComponent(content)}`;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
@@ -30,7 +26,7 @@ export const VietQRPaymentModal: React.FC<Props> = ({ orderId, amount, content, 
         <p className="text-sm text-gray-500 mb-6">Mở app Ngân hàng để quét mã</p>
         
         <div className="bg-gray-50 p-4 rounded-xl mb-6 inline-block border-2 border-dashed border-blue-200">
-          <img src={qrUrl} alt="VietQR" className="w-56 h-56 mx-auto object-contain" />
+          {qrCodeUrl ? <img src={qrCodeUrl} alt="VietQR do máy chủ tạo" className="w-56 h-56 mx-auto object-contain" /> : <p className="w-56 py-16 text-sm text-red-600">Backend chưa trả mã QR cho đơn này.</p>}
         </div>
 
         <div className="mb-4">
@@ -47,7 +43,7 @@ export const VietQRPaymentModal: React.FC<Props> = ({ orderId, amount, content, 
           <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
-          Giao dịch tự động hủy sau {timeLeft}s
+          Còn {timeLeft}s chờ cập nhật trạng thái thanh toán
         </div>
       </div>
     </div>

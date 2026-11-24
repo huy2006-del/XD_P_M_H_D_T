@@ -206,8 +206,8 @@ export const AdminDashboardPage: React.FC = () => {
           value={data?.overview ? String(data.overview.successOrderCount) : '--'}
           subText={
             data?.overview
-              ? `Thất bại: ${data.overview.failedOrderCount} • Lấp đầy kho: ${data.overview.inventoryFillRate.toFixed(1)}%`
-              : 'Nguồn: /api/v1/analytics/overview'
+              ? `Thất bại: ${data.overview.failedOrderCount} • Lấp đầy kho: ${data.overview.inventoryFillRate === null ? 'chưa có API' : `${data.overview.inventoryFillRate.toFixed(1)}%`}`
+              : 'Chưa tải được đơn hàng'
           }
           icon={<ShoppingBag className="w-5 h-5" />}
           color="text-emerald-600"
@@ -218,7 +218,11 @@ export const AdminDashboardPage: React.FC = () => {
           title="Số Máy Online"
           value={`${machineStats.online} / ${machineStats.total}`}
           subText={
-            machineStats.outOfOrder > 0
+            data?.partialErrors.some((error) => error.includes('/api/v1/machines'))
+              ? 'Không tải được dữ liệu máy'
+              : machineStats.total === 0
+                ? 'Chưa có máy trong hệ thống'
+                : machineStats.outOfOrder > 0
               ? `${machineStats.outOfOrder} máy đang lỗi / ngừng hoạt động`
               : 'Tất cả máy trong trạng thái kiểm soát'
           }
@@ -232,9 +236,11 @@ export const AdminDashboardPage: React.FC = () => {
           title="Cảnh Báo Chưa Xử Lý"
           value={String(unresolvedAlerts.length)}
           subText={
-            data?.coldChainHealth
+            data?.partialErrors.some((error) => error.includes('/api/v1/alerts'))
+              ? 'Không tải được danh sách cảnh báo'
+              : data?.coldChainHealth
               ? `MTTR xử lý sự cố: ${data.coldChainHealth.systemMttrMinutes.toFixed(1)} phút`
-              : 'Nguồn: /api/v1/alerts'
+              : 'Chưa có dữ liệu MTTR'
           }
           icon={<AlertTriangle className="w-5 h-5" />}
           color="text-red-600"
@@ -254,7 +260,7 @@ export const AdminDashboardPage: React.FC = () => {
                 Doanh Thu 7 Ngày Gần Nhất
               </h2>
               <p className="text-xs text-gray-500">
-                Nguồn: GET /api/v1/analytics/revenue-chart?range=7
+                Tổng hợp từ các đơn đã thanh toán và nhả hàng thành công (/api/v1/orders)
               </p>
             </div>
           </div>

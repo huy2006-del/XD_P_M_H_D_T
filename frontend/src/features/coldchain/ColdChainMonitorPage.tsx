@@ -287,7 +287,7 @@ export const ColdChainMonitorPage: React.FC = () => {
     try {
       setSimulating(true);
       await axiosInstance.post(
-        `/api/v1/simulator/machines/${machineId}/temperature-spike`,
+        `/api/v1/simulator/machines/${machineId}/temp-spike`,
         null,
         { params: { temp } }
       );

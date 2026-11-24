@@ -1,20 +1,19 @@
-import React, { useState } from 'react';
-import { CheckCircle2, ShieldCheck, FileText, Loader2, AlertCircle } from 'lucide-react';
+import React from 'react';
+import { CheckCircle2, ShieldCheck, Loader2, AlertCircle } from 'lucide-react';
 import type { RestockItem } from '../types';
 
 interface Props {
   items: RestockItem[];
   isSubmitting: boolean;
-  onComplete: (notes?: string) => Promise<void>;
+  onComplete: () => Promise<void>;
 }
 
 export const StepConfirmation: React.FC<Props> = ({ items, isSubmitting, onComplete }) => {
-  const [notes, setNotes] = useState('');
 
   const totalQuantity = items.reduce((sum, item) => sum + item.quantityAdded, 0);
 
   const handleConfirm = async () => {
-    await onComplete(notes.trim() || undefined);
+    await onComplete();
   };
 
   return (
@@ -61,31 +60,12 @@ export const StepConfirmation: React.FC<Props> = ({ items, isSubmitting, onCompl
         </div>
       </div>
 
-      {/* Ghi chú phiên nạp */}
-      <div className="space-y-2">
-        <label className="block text-sm font-semibold text-gray-700 flex items-center gap-1.5">
-          <FileText className="w-4 h-4 text-gray-400" />
-          <span>Ghi chú phiên tiếp hàng (Tùy chọn)</span>
-        </label>
-        <textarea
-          rows={2}
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          disabled={isSubmitting}
-          placeholder="Ví dụ: Tiếp đầy khay sáng thứ 2, kiểm tra nhiệt độ khay ổn định..."
-          className="w-full border border-gray-300 rounded-lg p-3 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none disabled:bg-gray-100"
-        />
-        <p className="text-xs text-gray-400">
-          Ghi chú sẽ được lưu vào nhật ký kiểm toán (Audit Trail) phục vụ truy vết vận hành.
-        </p>
-      </div>
-
       {/* Cảnh báo an toàn */}
       <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-800 flex items-start gap-2">
         <AlertCircle className="w-4 h-4 text-blue-600 mt-0.5 shrink-0" />
         <div>
-          Hệ thống sẽ đồng thời cập nhật tồn kho từng lô trên máy chủ và ghi nhận lịch sử Stock Movement
-          cho từng khay hàng theo nguyên tắc bất biến (Audit Trail).
+          Backend hiện lưu từng mục nạp riêng lẻ. Nếu một mục lỗi, các mục đã nạp thành công vẫn được giữ;
+          bạn có thể gửi lại phần chưa xử lý mà không bị nạp trùng.
         </div>
       </div>
 

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import axios from 'axios';
 import axiosInstance from '../../../shared/api/axiosInstance';
 import type { AddItemRequest, MachineSlot, FruitBatch, RestockItem } from '../types';
@@ -14,6 +14,7 @@ export function useRestockPlan() {
   const [items, setItems] = useState<RestockItem[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const submitLock = useRef(false);
 
   function resetPlan() {
     setItems([]);
@@ -56,15 +57,15 @@ export function useRestockPlan() {
     );
   }
 
-  async function completePlan(notes?: string): Promise<boolean> {
-    void notes;
-    if (isSubmitting) return false;
+  async function completePlan(): Promise<boolean> {
+    if (submitLock.current || isSubmitting) return false;
 
     if (items.length === 0) {
       setError('Cần ít nhất một lô hàng trong danh sách trước khi xác nhận nạp.');
       return false;
     }
 
+    submitLock.current = true;
     setIsSubmitting(true);
     setError(null);
 
@@ -72,7 +73,8 @@ export function useRestockPlan() {
     const totalToLoad = items.length;
 
     try {
-      for (const item of items) {
+      for (let index = 0; index < items.length; index += 1) {
+        const item = items[index];
         try {
           await axiosInstance.post(`/api/v1/slots/${item.slotId}/batches`, {
             batchId: item.batchId,
@@ -96,10 +98,16 @@ export function useRestockPlan() {
       setItems([]);
       return true;
     } catch (requestError: unknown) {
+      // Endpoint nạp từng khay riêng lẻ: giữ lại đúng phần chưa gửi để retry
+      // không nạp lần hai những mục đã được backend áp dụng.
+      if (loadedCount > 0) {
+        setItems((current) => current.slice(loadedCount));
+      }
       const message = getErrorMessage(requestError);
       setError(message);
       return false;
     } finally {
+      submitLock.current = false;
       setIsSubmitting(false);
     }
   }
