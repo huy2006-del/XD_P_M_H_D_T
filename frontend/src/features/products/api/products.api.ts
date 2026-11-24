@@ -7,6 +7,11 @@ import type {
 } from '../types/product.types';
 
 const BASE = '/api/v1/products';
+const API_ORIGIN = (
+  import.meta.env.VITE_API_URL ||
+  import.meta.env.VITE_API_BASE_URL ||
+  'http://localhost:8080'
+).replace(/\/$/, '');
 
 export const productsApi = {
   list: async (query: ProductListQuery): Promise<PaginatedResponse<Product>> => {
@@ -43,5 +48,18 @@ export const productsApi = {
 
   remove: async (id: string): Promise<void> => {
     await axiosInstance.delete(`${BASE}/${id}`);
+  },
+
+  uploadImage: async (file: File): Promise<string> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const { data } = await axiosInstance.post<{ imageUrl: string }>(
+      `${BASE}/images`,
+      formData,
+      { headers: { 'Content-Type': 'multipart/form-data' } },
+    );
+    return /^https?:\/\//i.test(data.imageUrl)
+      ? data.imageUrl
+      : new URL(data.imageUrl, API_ORIGIN).toString();
   },
 };

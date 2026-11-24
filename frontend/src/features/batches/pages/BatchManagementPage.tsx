@@ -21,6 +21,7 @@ export const BatchManagementPage: React.FC = () => {
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
+  const [productsError, setProductsError] = useState<string | null>(null);
   const [expiryFilterMode, setExpiryFilterMode] = useState<string>('all');
 
   // Tải danh mục sản phẩm cho dropdown lọc
@@ -29,9 +30,15 @@ export const BatchManagementPage: React.FC = () => {
     productsApi
       .list({ page: 0, size: 100, isActive: true })
       .then((res) => {
-        if (active) setProducts(res.content || []);
+        if (active) {
+          setProducts(res.content || []);
+          setProductsError(null);
+        }
       })
-      .catch((err) => console.error('Lỗi khi tải sản phẩm cho filter:', err));
+      .catch((err) => {
+        console.error('Lỗi khi tải sản phẩm cho filter:', err);
+        if (active) setProductsError('Không tải được danh sách sản phẩm để lọc lô.');
+      });
 
     return () => {
       active = false;
@@ -44,8 +51,8 @@ export const BatchManagementPage: React.FC = () => {
       case 'expired':
         updateFilters({ expired: true, expiringWithinDays: null });
         break;
-      case 'expiring_3':
-        updateFilters({ expired: false, expiringWithinDays: 3 });
+      case 'expiring_2d':
+        updateFilters({ expired: false, expiringWithinDays: 2 });
         break;
       case 'expiring_7':
         updateFilters({ expired: false, expiringWithinDays: 7 });
@@ -105,6 +112,12 @@ export const BatchManagementPage: React.FC = () => {
         </div>
       )}
 
+      {productsError && (
+        <div role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+          {productsError}
+        </div>
+      )}
+
       {/* Thanh bộ lọc dữ liệu */}
       <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-center">
         {/* Tìm kiếm */}
@@ -148,7 +161,7 @@ export const BatchManagementPage: React.FC = () => {
           >
             <option value="all">Tất cả tình trạng hạn</option>
             <option value="safe">Còn hạn an toàn</option>
-            <option value="expiring_3">Sắp hết hạn (≤ 3 ngày)</option>
+            <option value="expiring_2d">Sắp hết hạn (≤ 2 ngày)</option>
             <option value="expiring_7">Sắp hết hạn (≤ 7 ngày)</option>
             <option value="expired">Đã hết hạn</option>
           </select>

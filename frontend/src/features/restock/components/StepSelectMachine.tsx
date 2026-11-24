@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { Search, Monitor, MapPin, Hash, CheckCircle } from 'lucide-react';
 import axiosInstance from '../../../shared/api/axiosInstance';
-import type { Machine } from '../types';
+import type { Machine, MachineSlot } from '../types';
 
 interface Props {
   onSelect: (machine: Machine) => void;
@@ -13,6 +13,7 @@ export const StepSelectMachine: React.FC<Props> = ({ onSelect }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+  const [stockPercentByMachine, setStockPercentByMachine] = useState<Record<number, number | null>>({});
 
   useEffect(() => {
     let active = true;
@@ -20,7 +21,26 @@ export const StepSelectMachine: React.FC<Props> = ({ onSelect }) => {
     axiosInstance
       .get<Machine[]>('/api/v1/machines')
       .then(({ data }) => {
-        if (active) setMachines(Array.isArray(data) ? data : []);
+        if (!active) return;
+        const machineList = Array.isArray(data) ? data : [];
+        setMachines(machineList);
+        void Promise.all(
+          machineList.map(async (machine) => {
+            try {
+              const response = await axiosInstance.get<MachineSlot[]>(
+                `/api/v1/machines/${machine.id}/slots`
+              );
+              const slots = Array.isArray(response.data) ? response.data : [];
+              const capacity = slots.reduce((sum, slot) => sum + Math.max(0, slot.capacity), 0);
+              const stock = slots.reduce((sum, slot) => sum + Math.max(0, slot.currentStock), 0);
+              return [machine.id, capacity > 0 ? Math.round((stock / capacity) * 100) : null] as const;
+            } catch {
+              return [machine.id, null] as const;
+            }
+          })
+        ).then((results) => {
+          if (active) setStockPercentByMachine(Object.fromEntries(results));
+        });
       })
       .catch((requestError: unknown) => {
         if (active) {
@@ -101,12 +121,15 @@ export const StepSelectMachine: React.FC<Props> = ({ onSelect }) => {
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {filteredMachines.map((m) => (
+        {filteredMachines.map((m) => {
+          const stockPercent = stockPercentByMachine[m.id];
+          const isLowStock = stockPercent != null && stockPercent < 20;
+          return (
           <button
             type="button"
             key={m.id}
             onClick={() => onSelect(m)}
-            className="w-full border border-gray-200 rounded-xl p-4 text-left cursor-pointer transition-all shadow-xs hover:shadow-md hover:border-blue-400 bg-white group"
+            className={`w-full rounded-xl border p-4 text-left cursor-pointer transition-all shadow-xs hover:shadow-md bg-white group ${isLowStock ? 'border-red-300 bg-red-50/40 hover:border-red-400' : 'border-gray-200 hover:border-blue-400'}`}
           >
             <div className="flex justify-between items-center mb-2">
               <div className="flex items-center gap-2">
@@ -129,12 +152,23 @@ export const StepSelectMachine: React.FC<Props> = ({ onSelect }) => {
               </div>
             </div>
 
+            {stockPercent != null && (
+              <div className="mt-3 flex items-center justify-between text-xs">
+                <span className="text-gray-500">Tồn theo sức chứa</span>
+                <strong className={isLowStock ? 'text-red-700' : 'text-gray-700'}>
+                  {stockPercent}%
+                  {isLowStock && ' · Cần tiếp hàng'}
+                </strong>
+              </div>
+            )}
+
             <div className="mt-3 pt-2 border-t border-gray-100 flex items-center justify-between text-xs text-blue-600 font-semibold">
               <span>Bấm để chọn máy này</span>
               <CheckCircle className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity" />
             </div>
           </button>
-        ))}
+          );
+        })}
       </div>
 
       {!error && filteredMachines.length === 0 && (

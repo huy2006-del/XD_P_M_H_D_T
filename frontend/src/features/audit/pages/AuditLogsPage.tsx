@@ -12,6 +12,7 @@ export const AuditLogsPage: React.FC = () => {
   const [logs, setLogs] = useState<AuditLogItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [selectedLog, setSelectedLog] = useState<AuditLogItem | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const [filters, setFilters] = useState<AuditFilterParams>({
     username: '',
@@ -23,10 +24,12 @@ export const AuditLogsPage: React.FC = () => {
   const fetchLogs = useCallback(async () => {
     try {
       setLoading(true);
+      setError(null);
       const data = await auditService.getAuditLogs(filters);
       setLogs(data);
     } catch (err) {
       console.error('Lỗi khi tải Audit Logs:', err);
+      setError(err instanceof Error ? err.message : 'Không thể tải nhật ký thao tác.');
     } finally {
       setLoading(false);
     }
@@ -106,6 +109,15 @@ export const AuditLogsPage: React.FC = () => {
           Làm mới
         </button>
       </div>
+
+      {error && (
+        <div role="alert" className="mb-4 flex flex-col gap-2 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 sm:flex-row sm:items-center sm:justify-between">
+          <span>{error}</span>
+          <button type="button" onClick={() => void fetchLogs()} className="font-semibold underline">
+            Thử lại
+          </button>
+        </div>
+      )}
 
       {/* Thanh lọc dữ liệu */}
       <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 mb-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-center">

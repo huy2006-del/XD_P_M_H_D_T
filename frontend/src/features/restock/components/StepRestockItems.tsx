@@ -4,7 +4,7 @@ import { Trash2, Plus, AlertCircle, Info, Calendar } from 'lucide-react';
 import axiosInstance from '../../../shared/api/axiosInstance';
 import type { PaginatedResponse } from '../../../shared/types/common.types';
 import type { AddItemRequest, FruitBatch, MachineSlot, RestockItem } from '../types';
-import { formatDate } from '../../../shared/utils/dateUtils';
+import { formatDate, getDaysUntilExpiry } from '../../../shared/utils/dateUtils';
 
 interface Props {
   selectedSlot: MachineSlot;
@@ -41,12 +41,9 @@ export const StepRestockItems: React.FC<Props> = ({
       .then(({ data }) => {
         if (!active) return;
         const list = Array.isArray(data?.content) ? data.content : [];
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-
         // Lọc nghiêm ngặt: không hết hạn, còn tồn kho, đúng sản phẩm khay
         const validBatches = list.filter((b) => {
-          const isDateValid = new Date(b.expiryDate) > today;
+          const isDateValid = getDaysUntilExpiry(b.expiryDate) > 0;
           return !b.expired && isDateValid && b.quantityRemaining > 0;
         });
 
@@ -221,6 +218,27 @@ export const StepRestockItems: React.FC<Props> = ({
                 >
                   <Plus className="w-4 h-4" />
                   {isAdding ? 'Đang thêm...' : 'Thêm'}
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-2 pt-1">
+                {[1, 5].map((amount) => (
+                  <button
+                    key={amount}
+                    type="button"
+                    disabled={isAdding || maxAllowed <= 0}
+                    onClick={() => setQuantity((current) => Math.min(maxAllowed, current + amount))}
+                    className="rounded-md border border-gray-200 bg-white px-2.5 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+                  >
+                    +{amount}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  disabled={isAdding || maxAllowed <= 0}
+                  onClick={() => setQuantity(maxAllowed)}
+                  className="rounded-md border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-100 disabled:opacity-50"
+                >
+                  Đầy khay ({maxAllowed})
                 </button>
               </div>
             </div>

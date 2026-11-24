@@ -6,6 +6,7 @@ import { Modal } from '@/shared/components/ui/Modal';
 import { Button } from '@/shared/components/ui/Button';
 import { Input } from '@/shared/components/ui/Input';
 import { ImageUploadField } from './ImageUploadField';
+import { productsApi } from '../api/products.api';
 import {
   PRODUCT_UNITS,
 } from '../types/product.types';
@@ -238,6 +239,7 @@ export const ProductFormModal = ({
               <ImageUploadField
                 value={field.value ?? ''}
                 onChange={field.onChange}
+                onUploadFile={productsApi.uploadImage}
                 invalid={!!fieldState.error}
                 errorMessage={fieldState.error?.message}
               />
