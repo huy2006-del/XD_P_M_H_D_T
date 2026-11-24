@@ -40,8 +40,8 @@ export const useBatches = (initialFilters?: Partial<BatchFilterParams>) => {
 
     try {
       const params: Record<string, unknown> = {
-        page: pagination.page,
-        size: pagination.size,
+        page: filters.search?.trim() ? 0 : pagination.page,
+        size: filters.search?.trim() ? 100 : pagination.size,
       };
 
       if (filters.productId) {
@@ -54,32 +54,46 @@ export const useBatches = (initialFilters?: Partial<BatchFilterParams>) => {
         params.expiringWithinDays = filters.expiringWithinDays;
       }
 
-      const response = await axiosInstance.get<PaginatedResponse<FruitBatch>>(API_URL, {
-        params,
-      });
+      const response = await axiosInstance.get<PaginatedResponse<FruitBatch>>(API_URL, { params });
+      const firstPage = response.data;
+      let items = Array.isArray(firstPage.content) ? firstPage.content : [];
 
-      const data = response.data;
-      let items = Array.isArray(data.content) ? data.content : [];
+      // API lô hàng chưa hỗ trợ tìm kiếm keyword; nạp các trang còn lại để tìm đủ kho.
+      if (filters.search?.trim()) {
+        const pageCount = firstPage.totalPages ?? 1;
+        if (pageCount > 1) {
+          const remainingPages = await Promise.all(
+            Array.from({ length: pageCount - 1 }, (_, index) =>
+              axiosInstance.get<PaginatedResponse<FruitBatch>>(API_URL, {
+                params: { ...params, page: index + 1 },
+              })
+            )
+          );
+          items = [...items, ...remainingPages.flatMap((page) => page.data.content ?? [])];
+        }
 
-      // Lọc client-side cho ô tìm kiếm tự do theo mã lô hoặc nhà cung cấp
-      if (filters.search && filters.search.trim()) {
         const query = filters.search.trim().toLowerCase();
         items = items.filter(
           (b) =>
-            b.batchCode.toLowerCase().includes(query) ||
+            b.batchCode?.toLowerCase().includes(query) ||
             (b.supplier && b.supplier.toLowerCase().includes(query)) ||
             (b.productName && b.productName.toLowerCase().includes(query))
         );
+        const totalElements = items.length;
+        const totalPages = Math.max(1, Math.ceil(totalElements / pagination.size));
+        items = items.slice(pagination.page * pagination.size, (pagination.page + 1) * pagination.size);
+        setPagination((prev) => ({ ...prev, totalElements, totalPages }));
+      } else {
+        setPagination((prev) => ({
+          ...prev,
+          page: firstPage.page ?? 0,
+          size: firstPage.size ?? pagination.size,
+          totalElements: firstPage.totalElements ?? items.length,
+          totalPages: firstPage.totalPages ?? Math.max(1, Math.ceil(items.length / pagination.size)),
+        }));
       }
 
       setBatches(items);
-      setPagination((prev) => ({
-        ...prev,
-        page: data.page ?? 0,
-        size: data.size ?? 10,
-        totalElements: data.totalElements ?? items.length,
-        totalPages: data.totalPages ?? Math.max(1, Math.ceil((data.totalElements ?? items.length) / (data.size ?? 10))),
-      }));
     } catch (err: unknown) {
       const message = axios.isAxiosError<{ message?: string }>(err)
         ? err.response?.data?.message ?? err.message

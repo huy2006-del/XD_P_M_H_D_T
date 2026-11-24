@@ -1,6 +1,4 @@
 import { useCallback, useState } from 'react';
-import axios from 'axios';
-import axiosInstance from '../../../shared/api/axiosInstance';
 import { auditService } from '../../audit/auditService';
 import type { AuditLogItem } from '../../audit/types';
 
@@ -33,17 +31,17 @@ export function useRestockHistory() {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchHistory = useCallback(async (machineId?: number) => {
+  const fetchHistory = useCallback(async () => {
     setLoading(true);
     setError(null);
 
     try {
-      // Ưu tiên 1: Thử gọi audit logs với action RESTOCK_COMPLETED
       const logs: AuditLogItem[] = await auditService.getAuditLogs({
         action: 'RESTOCK_COMPLETED',
       });
 
-      const entries: RestockHistoryEntry[] = logs.map((log) => {
+      const entries: RestockHistoryEntry[] = logs
+        .map((log) => {
         const parsed = parseRestockDetails(log.details || '');
         return {
           id: log.id,
@@ -54,26 +52,15 @@ export function useRestockHistory() {
           slotCode: parsed.slotId ? `Khay #${parsed.slotId}` : undefined,
           quantity: parsed.quantity,
         };
-      });
+        });
 
       // Sắp xếp thời gian mới nhất lên đầu
       entries.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
       setHistory(entries);
-    } catch {
-      // Ưu tiên 2: Fallback nếu gọi endpoint riêng nếu backend có
-      try {
-        const endpoint = machineId
-          ? `/api/v1/restock-sessions/machine/${machineId}`
-          : `/api/v1/restock-sessions`;
-        const res = await axiosInstance.get<RestockHistoryEntry[]>(endpoint);
-        setHistory(Array.isArray(res.data) ? res.data : []);
-      } catch (err: unknown) {
-        const msg = axios.isAxiosError<{ message?: string }>(err)
-          ? err.response?.data?.message ?? err.message
-          : 'Không thể tải lịch sử nạp hàng.';
-        setError(msg);
-      }
+    } catch (err: unknown) {
+      setHistory([]);
+      setError(err instanceof Error ? err.message : 'Không thể tải lịch sử nạp hàng.');
     } finally {
       setLoading(false);
     }

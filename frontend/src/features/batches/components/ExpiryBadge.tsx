@@ -26,7 +26,7 @@ export const ExpiryBadge: React.FC<Props> = ({ expiryDate, expired, daysToExpiry
 
   if (calculatedDays <= 2) {
     return (
-      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-rose-100 text-rose-700 border border-rose-200 animate-pulse">
+      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200">
         <AlertTriangle className="w-3.5 h-3.5" />
         Sắp hết hạn ({calculatedDays} ngày)
       </span>

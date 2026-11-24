@@ -1,8 +1,11 @@
 export const getDaysUntilExpiry = (expiryDateString: string): number => {
   const today = new Date();
   today.setHours(0, 0, 0, 0); // Reset giờ để so sánh theo ngày
-  
-  const expiryDate = new Date(expiryDateString);
+
+  // LocalDate từ backend có dạng YYYY-MM-DD; parse thủ công để tránh lệch ngày do UTC.
+  const datePart = expiryDateString.slice(0, 10);
+  const [year, month, day] = datePart.split('-').map(Number);
+  const expiryDate = new Date(year, month - 1, day);
   expiryDate.setHours(0, 0, 0, 0);
 
   const diffTime = expiryDate.getTime() - today.getTime();
@@ -13,8 +16,16 @@ export const getDaysUntilExpiry = (expiryDateString: string): number => {
 
 export const formatDate = (dateString: string): string => {
   if (!dateString) return '';
-  const date = new Date(dateString);
+  const [year, month, day] = dateString.slice(0, 10).split('-').map(Number);
+  const date = new Date(year, month - 1, day);
   return date.toLocaleDateString('vi-VN');
+};
+
+export const toLocalDateInputValue = (date: Date): string => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 };
 
 export const generateLotCode = (): string => {

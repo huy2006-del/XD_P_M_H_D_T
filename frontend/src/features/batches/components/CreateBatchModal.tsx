@@ -4,7 +4,7 @@ import { Package, Calendar, DollarSign, Truck, Hash, AlertCircle } from 'lucide-
 import type { CreateBatchRequest, FruitBatch } from '../types';
 import { productsApi } from '../../products/api/products.api';
 import type { Product } from '../../products/types/product.types';
-import { generateLotCode } from '../../../shared/utils/dateUtils';
+import { generateLotCode, getDaysUntilExpiry, toLocalDateInputValue } from '../../../shared/utils/dateUtils';
 
 interface Props {
   isOpen: boolean;
@@ -15,6 +15,7 @@ interface Props {
 export const CreateBatchModal: React.FC<Props> = ({ isOpen, onClose, onSubmit }) => {
   const [products, setProducts] = useState<Product[]>([]);
   const [loadingProducts, setLoadingProducts] = useState<boolean>(false);
+  const [productsError, setProductsError] = useState('');
 
   const [formData, setFormData] = useState<CreateBatchRequest>({
     productId: 0,
@@ -34,6 +35,7 @@ export const CreateBatchModal: React.FC<Props> = ({ isOpen, onClose, onSubmit })
 
     let active = true;
     setLoadingProducts(true);
+    setProductsError('');
 
     productsApi
       .list({ page: 0, size: 100, isActive: true })
@@ -51,6 +53,7 @@ export const CreateBatchModal: React.FC<Props> = ({ isOpen, onClose, onSubmit })
       })
       .catch((err) => {
         console.error('Không thể tải danh sách sản phẩm:', err);
+        if (active) setProductsError('Không tải được sản phẩm. Hãy thử lại trước khi lưu lô.');
       })
       .finally(() => {
         if (active) setLoadingProducts(false);
@@ -82,12 +85,7 @@ export const CreateBatchModal: React.FC<Props> = ({ isOpen, onClose, onSubmit })
       return;
     }
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const selectedExpiry = new Date(formData.expiryDate);
-    selectedExpiry.setHours(0, 0, 0, 0);
-
-    if (selectedExpiry <= today) {
+    if (getDaysUntilExpiry(formData.expiryDate) <= 0) {
       setErrorMsg('Hạn sử dụng phải lớn hơn ngày hiện tại!');
       return;
     }
@@ -127,6 +125,9 @@ export const CreateBatchModal: React.FC<Props> = ({ isOpen, onClose, onSubmit })
   const handleGenerateCode = () => {
     setFormData((prev) => ({ ...prev, batchCode: generateLotCode() }));
   };
+
+  const earliestExpiry = new Date();
+  earliestExpiry.setDate(earliestExpiry.getDate() + 1);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
@@ -178,6 +179,7 @@ export const CreateBatchModal: React.FC<Props> = ({ isOpen, onClose, onSubmit })
                 ))}
               </select>
             )}
+            {productsError && <p role="alert" className="mt-1 text-xs text-red-600">{productsError}</p>}
             <p className="text-xs text-gray-400 mt-1">
               Khay bán hàng sẽ chỉ chấp nhận lô có đúng sản phẩm đã gán cho khay.
             </p>
@@ -237,6 +239,7 @@ export const CreateBatchModal: React.FC<Props> = ({ isOpen, onClose, onSubmit })
               <input
                 type="date"
                 required
+                min={toLocalDateInputValue(earliestExpiry)}
                 className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                 value={formData.expiryDate}
                 onChange={(e) => setFormData({ ...formData, expiryDate: e.target.value })}
