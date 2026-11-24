@@ -28,3 +28,34 @@ public class ReportService {
 
         StringWriter writer = new StringWriter();
         // Ghi UTF-8 BOM để Excel không lỗi font tiếng Việt
+        writer.write("\uFEFF");
+
+        // Header CSV
+        writer.write("Mã Đơn Hàng,Mã Máy,Tổng Tiền (VND),Phương Thức,Thanh Toán,Nhả Hàng,Ngày Tạo\n");
+
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+
+        for (Order order : orders) {
+            writer.write(String.format("%s,%s,%s,%s,%s,%s,%s\n",
+                    escapeCsv(order.getOrderCode()),
+                    order.getMachineId() != null ? order.getMachineId() : "",
+                    order.getTotalAmount() != null ? order.getTotalAmount().toPlainString() : "0",
+                    order.getPaymentMethod(),
+                    order.getPaymentStatus(),
+                    order.getDispenseStatus(),
+                    order.getCreatedAt() != null ? order.getCreatedAt().format(formatter) : ""
+            ));
+        }
+
+        return writer.toString();
+    }
+
+    private String escapeCsv(String data) {
+        if (data == null) return "";
+        if (data.contains(",") || data.contains("\"") || data.contains("\n")) {
+            data = data.replace("\"", "\"\"");
+            return "\"" + data + "\"";
+        }
+        return data;
+    }
+}
