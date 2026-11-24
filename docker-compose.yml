@@ -1,19 +1,242 @@
 name: freshvend
 
 services:
+  # ==========================================
+  # 1. INFRASTRUCTURE LAYER
+  # ==========================================
   postgres:
     image: postgres:15-alpine
     container_name: freshvend_postgres
     restart: always
     environment:
-      POSTGRES_USER: freshvend_user
-      POSTGRES_PASSWORD: freshvend_secret_password
-      POSTGRES_DB: freshvend_app
+      POSTGRES_USER: ${POSTGRES_USER:-freshvend_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-freshvend_secret_password}
+      POSTGRES_DB: ${POSTGRES_DB:-freshvend_app}
     ports:
       - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./database/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-freshvend_user} -d ${POSTGRES_DB:-freshvend_app}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - freshvend-net
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: freshvend_rabbitmq
+    restart: always
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-guest}
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - freshvend-net
+
+  # ==========================================
+  # 2. SERVICE DISCOVERY (EUREKA)
+  # ==========================================
+  discovery-server:
+    image: eclipse-temurin:21-jre-alpine
+    container_name: freshvend_discovery
+    restart: always
+    working_dir: /app
+    volumes:
+      - ./backend/discovery-server/target:/app:ro
+    command: >
+      sh -c "apk add --no-cache curl >/dev/null 2>&1 &&
+      JAR_FILE=$$(ls /app/*.jar | grep -v '\.original$$' | head -n 1) &&
+      java -Xms64m -Xmx256m -jar $$JAR_FILE"
+    ports:
+      - "8761:8761"
+    environment:
+      SERVER_PORT: 8761
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8761/ || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - freshvend-net
+
+  # ==========================================
+  # 3. CORE MICROSERVICES
+  # ==========================================
+  identity-service:
+    image: eclipse-temurin:21-jre-alpine
+    container_name: freshvend_identity
+    restart: always
+    working_dir: /app
+    volumes:
+      - ./backend/identity-service/target:/app:ro
+    command: >
+      sh -c "JAR_FILE=$$(ls /app/*.jar | grep -v '\.original$$' | head -n 1) &&
+      java -Xms64m -Xmx256m -jar $$JAR_FILE"
+    ports:
+      - "8081:8081"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      discovery-server:
+        condition: service_healthy
+    environment:
+      SERVER_PORT: 8081
+      DB_URL: jdbc:postgresql://postgres:5432/freshvend_identity
+      DB_USERNAME: ${POSTGRES_USER:-freshvend_user}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-freshvend_secret_password}
+      EUREKA_SERVER_URL: http://discovery-server:8761/eureka/
+      EUREKA_INSTANCE_PREFER_IP_ADDRESS: "true"
+      JWT_SECRET: ${JWT_SECRET:-FreshVendSuperSecretKeyForJWTSignatureVerification2026MustBe256Bits!}
+      JWT_EXPIRATION: ${JWT_EXPIRATION:-86400000}
+      INTERNAL_GATEWAY_SECRET: ${INTERNAL_GATEWAY_SECRET:-FV_INTERNAL_GATEWAY_SECRET_2026}
+    networks:
+      - freshvend-net
+
+  inventory-service:
+    image: eclipse-temurin:21-jre-alpine
+    container_name: freshvend_inventory
+    restart: always
+    working_dir: /app
+    volumes:
+      - ./backend/inventory-service/target:/app
+      - product_uploads:/app/uploads
+    command: >
+      sh -c "JAR_FILE=$$(ls /app/*.jar | grep -v '\.original$$' | head -n 1) &&
+      java -Xms64m -Xmx256m -jar $$JAR_FILE"
+    ports:
+      - "8082:8082"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      discovery-server:
+        condition: service_healthy
+    environment:
+      SERVER_PORT: 8082
+      DB_URL: jdbc:postgresql://postgres:5432/freshvend_inventory
+      DB_USERNAME: ${POSTGRES_USER:-freshvend_user}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-freshvend_secret_password}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USERNAME: ${RABBITMQ_USER:-guest}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
+      EUREKA_SERVER_URL: http://discovery-server:8761/eureka/
+      EUREKA_INSTANCE_PREFER_IP_ADDRESS: "true"
+      INTERNAL_GATEWAY_SECRET: ${INTERNAL_GATEWAY_SECRET:-FV_INTERNAL_GATEWAY_SECRET_2026}
+    networks:
+      - freshvend-net
+
+  machine-coldchain-service:
+    image: eclipse-temurin:21-jre-alpine
+    container_name: freshvend_machine
+    restart: always
+    working_dir: /app
+    volumes:
+      - ./backend/machine-coldchain-service/target:/app:ro
+    command: >
+      sh -c "JAR_FILE=$$(ls /app/*.jar | grep -v '\.original$$' | head -n 1) &&
+      java -Xms64m -Xmx256m -jar $$JAR_FILE"
+    ports:
+      - "8083:8083"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      discovery-server:
+        condition: service_healthy
+    environment:
+      SERVER_PORT: 8083
+      DB_URL: jdbc:postgresql://postgres:5432/freshvend_machine_db
+      DB_USERNAME: ${POSTGRES_USER:-freshvend_user}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-freshvend_secret_password}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USERNAME: ${RABBITMQ_USER:-guest}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USER:-guest}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
+      EUREKA_SERVER_URL: http://discovery-server:8761/eureka/
+      EUREKA_INSTANCE_PREFER_IP_ADDRESS: "true"
+      INTERNAL_GATEWAY_SECRET: ${INTERNAL_GATEWAY_SECRET:-FV_INTERNAL_GATEWAY_SECRET_2026}
+    networks:
+      - freshvend-net
+
+  # ==========================================
+  # 4. API GATEWAY
+  # ==========================================
+  api-gateway:
+    image: eclipse-temurin:21-jre-alpine
+    container_name: freshvend_gateway
+    restart: always
+    working_dir: /app
+    volumes:
+      - ./backend/api-gateway/target:/app:ro
+    command: >
+      sh -c "JAR_FILE=$$(ls /app/*.jar | grep -v '\.original$$' | head -n 1) &&
+      java -Xms64m -Xmx256m -jar $$JAR_FILE"
+    ports:
+      - "8080:8080"
+    depends_on:
+      discovery-server:
+        condition: service_healthy
+      identity-service:
+        condition: service_started
+      inventory-service:
+        condition: service_started
+      machine-coldchain-service:
+        condition: service_started
+    environment:
+      SERVER_PORT: 8080
+      EUREKA_SERVER_URL: http://discovery-server:8761/eureka/
+      EUREKA_INSTANCE_PREFER_IP_ADDRESS: "true"
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:8081}
+      JWT_SECRET: ${JWT_SECRET:-FreshVendSuperSecretKeyForJWTSignatureVerification2026MustBe256Bits!}
+      INTERNAL_GATEWAY_SECRET: ${INTERNAL_GATEWAY_SECRET:-FV_INTERNAL_GATEWAY_SECRET_2026}
+    networks:
+      - freshvend-net
+
+  # ==========================================
+  # 5. FRONTEND (REACT / VITE)
+  # ==========================================
+  frontend:
+    image: node:20-alpine
+    container_name: freshvend_frontend
+    restart: always
+    working_dir: /app
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0 --port 5173"
+    ports:
+      - "5173:5173"
+    depends_on:
+      - api-gateway
+    environment:
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8080}
+      VITE_WS_URL: ${VITE_WS_URL:-ws://localhost:8080/ws-freshvend}
+    networks:
+      - freshvend-net
 
 volumes:
   postgres_data:
+  product_uploads:
+  frontend_node_modules:
+
+networks:
+  freshvend-net:
+    driver: bridge

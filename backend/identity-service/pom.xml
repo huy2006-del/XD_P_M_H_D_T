@@ -51,6 +51,12 @@
             <artifactId>jjwt-jackson</artifactId>
             <scope>runtime</scope>
         </dependency>
+        <!-- OpenAPI 3 / Swagger UI tương thích Spring Boot 3.5 -->
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+            <version>2.8.6</version>
+        </dependency>
     </dependencies>
     <build>
         <plugins>

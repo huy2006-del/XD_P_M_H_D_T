@@ -17,3 +17,11 @@ eureka:
   client:
     service-url:
       defaultZone: ${EUREKA_SERVER_URL:http://localhost:8761/eureka/}
+
+jwt:
+  secret: ${JWT_SECRET:FreshVendSuperSecretKeyForJWTSignatureVerification2026MustBe256Bits!}
+  expiration: ${JWT_EXPIRATION:86400000}
+
+internal:
+  gateway:
+    secret: ${INTERNAL_GATEWAY_SECRET:FV_INTERNAL_GATEWAY_SECRET_2026}

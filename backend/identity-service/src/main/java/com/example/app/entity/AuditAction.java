@@ -5,5 +5,10 @@ public enum AuditAction {
     USER_CREATED,
     RESTOCK_COMPLETED,   // Operator hoàn tất nạp hàng
     ALERT_RESOLVED,      // Operator giải quyết cảnh báo nhiệt độ
-    THRESHOLD_UPDATED    // Admin cập nhật dải nhiệt độ an toàn
+    THRESHOLD_UPDATED,   // Admin cập nhật dải nhiệt độ an toàn
+    CREATE,
+    UPDATE,
+    DELETE,
+    DISPENSE,
+    RESTOCK
 }
