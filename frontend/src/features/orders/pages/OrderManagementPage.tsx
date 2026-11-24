@@ -42,6 +42,11 @@ export const OrderManagementPage: React.FC = () => {
     fetchOrders();
   }, [fetchOrders]);
 
+  useEffect(() => {
+    const timer = window.setInterval(() => void fetchOrders(), 10_000);
+    return () => window.clearInterval(timer);
+  }, [fetchOrders]);
+
   const handleFilterChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFilters((prev) => ({ ...prev, [name]: value }));
@@ -54,7 +59,11 @@ export const OrderManagementPage: React.FC = () => {
       case 'PENDING_PAYMENT':
         return <span className="px-2.5 py-1 bg-yellow-100 text-yellow-700 text-xs font-bold rounded-full">🟡 CHỜ THANH TOÁN</span>;
       case 'REFUNDED_JAMMED':
-        return <span className="px-2.5 py-1 bg-red-100 text-red-700 text-xs font-bold rounded-full">🔴 ĐÃ HOÀN TIỀN</span>;
+        return <span className="px-2.5 py-1 bg-red-100 text-red-700 text-xs font-bold rounded-full">🔴 KẸT HÀNG • CÓ VOUCHER</span>;
+      case 'DISPENSING':
+        return <span className="px-2.5 py-1 bg-blue-100 text-blue-700 text-xs font-bold rounded-full">🔵 ĐÃ THANH TOÁN • CHỜ NHẢ</span>;
+      case 'PAYMENT_FAILED':
+        return <span className="px-2.5 py-1 bg-red-100 text-red-700 text-xs font-bold rounded-full">🔴 THANH TOÁN THẤT BẠI</span>;
       default:
         return <span className="px-2.5 py-1 bg-gray-100 text-gray-700 text-xs font-bold rounded-full">{status}</span>;
     }
@@ -117,6 +126,8 @@ export const OrderManagementPage: React.FC = () => {
           <option value="SUCCESS">Thành công</option>
           <option value="PENDING_PAYMENT">Chờ thanh toán</option>
           <option value="REFUNDED_JAMMED">Hoàn tiền</option>
+          <option value="DISPENSING">Đã thanh toán, đang chờ nhả</option>
+          <option value="PAYMENT_FAILED">Thanh toán thất bại</option>
         </select>
       </div>
 
@@ -129,7 +140,7 @@ export const OrderManagementPage: React.FC = () => {
                 <th className="p-4 font-semibold">Mã đơn</th>
                 <th className="p-4 font-semibold">Thời gian</th>
                 <th className="p-4 font-semibold">Máy bán</th>
-                <th className="p-4 font-semibold">Trái cây</th>
+                <th className="p-4 font-semibold">Sản phẩm / số lượng</th>
                 <th className="p-4 font-semibold">Số tiền</th>
                 <th className="p-4 font-semibold">Trạng thái</th>
               </tr>

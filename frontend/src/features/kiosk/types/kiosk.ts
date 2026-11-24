@@ -1,7 +1,7 @@
 // 1. DTO Trạng thái máy
 export interface MachineStatusDTO {
   machineId: number;
-  status: 'ONLINE' | 'OFFLINE' | 'MAINTENANCE';
+  status: 'ONLINE' | 'OFFLINE' | 'MAINTENANCE' | 'OUT_OF_ORDER' | 'ERROR' | string;
   temperature: number;
 }
 
@@ -10,6 +10,7 @@ export interface MachineSlotDTO {
   slotId: number;
   slotCode: string;
   productName: string;
+  productId?: number | null;
   price: number;
   productPrice?: number;
   capacity?: number;
@@ -26,7 +27,7 @@ export interface OrderItemRequest {
 
 export interface CreateOrderRequest {
   machineId: number;
-  items: OrderItemRequest[];
+  items: Array<{ slotId: number; productId: number; slotNumber: number; quantity: number; unitPrice: number }>;
 }
 
 // 4. DTO Phản hồi tạo đơn
@@ -35,6 +36,9 @@ export interface OrderResponse {
   orderCode: string;
   totalAmount: number;
   qrCodeUrl: string; // Link VietQR hoặc mã thô
-  status: 'PENDING' | 'PAID' | 'FAILED' | 'EXPIRED' | 'CANCELLED';
+  status: string;
+  paymentStatus: string;
+  dispenseStatus: string;
+  refundVoucherCode?: string | null;
   expiresAt: string;
 }

@@ -10,6 +10,8 @@ import {
   Apple,
   LayoutDashboard,
   Package,
+  Boxes,
+  ArrowDownToLine,
   Monitor,
   LogOut,
   Menu,
@@ -45,6 +47,16 @@ const menuItems = [
     label: "Products",
     path: "/admin/products",
     icon: Package,
+  },
+  {
+    label: "Lô hàng",
+    path: "/admin/batches",
+    icon: Boxes,
+  },
+  {
+    label: "Tiếp hàng",
+    path: "/admin/restock",
+    icon: ArrowDownToLine,
   },
   {
     label: "Machines",

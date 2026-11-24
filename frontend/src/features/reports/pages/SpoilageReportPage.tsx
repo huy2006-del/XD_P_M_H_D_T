@@ -9,15 +9,19 @@ import type { SpoilageReportResponse } from '../types';
 export const SpoilageReportPage: React.FC = () => {
   const [data, setData] = useState<SpoilageReportResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState<string>('');
 
   const fetchReport = useCallback(async () => {
     try {
       setLoading(true);
+      setError(null);
       const res = await spoilageService.getSpoilageReport({ search });
       setData(res);
     } catch (err) {
       console.error('Lỗi khi tải báo cáo hao hụt:', err);
+      setError('Không thể tải dữ liệu lô hết hạn từ backend.');
+      setData(null);
     } finally {
       setLoading(false);
     }
@@ -78,6 +82,7 @@ export const SpoilageReportPage: React.FC = () => {
 
       {/* KPI Thẻ thống kê */}
       {data && <SpoilageStatsCards summary={data.summary} />}
+      {error && <p role="alert" className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
 
       {/* Thanh tìm kiếm */}
       <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 mb-6 flex flex-col md:flex-row gap-4 justify-between items-center">

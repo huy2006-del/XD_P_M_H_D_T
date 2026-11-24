@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useRestockPlan } from '../hooks/useRestockPlan';
 import { StepSelectMachine } from '../components/StepSelectMachine';
@@ -18,6 +18,8 @@ const STEPS = [
 
 export const RestockWizardPage: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const basePath = location.pathname.startsWith('/admin') ? '/admin' : '/operator';
   const [currentStep, setCurrentStep] = useState(0);
   const [selectedMachine, setSelectedMachine] = useState<Machine | null>(null);
   const [selectedSlot, setSelectedSlot] = useState<MachineSlot | null>(null);
@@ -36,12 +38,12 @@ export const RestockWizardPage: React.FC = () => {
     setCurrentStep(2);
   };
 
-  const handleComplete = async (notes?: string) => {
-    const completed = await completePlan(notes);
+  const handleComplete = async () => {
+    const completed = await completePlan();
     if (!completed) return;
 
     toast.success('Đã nạp hàng thành công! Tồn kho khay đã được cập nhật.');
-    navigate('/operator/restock/history', { replace: true });
+    navigate(`${basePath}/restock/history`, { replace: true });
   };
 
   return (
@@ -57,7 +59,7 @@ export const RestockWizardPage: React.FC = () => {
 
         <button
           type="button"
-          onClick={() => navigate('/operator/restock/history')}
+          onClick={() => navigate(`${basePath}/restock/history`)}
           className="inline-flex items-center gap-1.5 px-3.5 py-2 border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 text-sm font-medium rounded-lg shadow-xs transition-colors cursor-pointer"
         >
           <History className="w-4 h-4 text-gray-500" />
