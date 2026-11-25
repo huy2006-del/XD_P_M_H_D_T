@@ -20,7 +20,8 @@ export default function KioskSimulator({ machineId = 1 }: Props) {
   const [searchQuery, setSearchQuery] = useState('');
   
   // --- STATE GIỎ HÀNG ---
-  const [cart, setCart] = useState(new Map()); 
+  // [FIX] Khai báo rõ generic Map<number, number> để đảm bảo an toàn kiểu TypeScript
+  const [cart, setCart] = useState(new Map());
   const [isProcessing, setIsProcessing] = useState(false);
   
   // --- STATE THANH TOÁN & HOÀN TẤT ---
@@ -56,18 +57,18 @@ export default function KioskSimulator({ machineId = 1 }: Props) {
   // 2. NGHIỆP VỤ GIỎ HÀNG
   const handleAddToCart = (slot: MachineSlotDTO) => {
     if (slot.currentStock <= 0 || slot.status === 'OUT_OF_STOCK') return;
-    setCart((prev: Map<number, number>) => {
+    setCart((prev) => {
       const newCart = new Map(prev);
-      const currentQty: number = newCart.get(slot.slotId) ?? 0;
+      const currentQty = newCart.get(slot.slotId) ?? 0;
       if (currentQty < slot.currentStock) newCart.set(slot.slotId, currentQty + 1);
       return newCart;
     });
   };
 
   const handleDecreaseQty = (slotId: number) => {
-    setCart((prev: Map<number, number>) => {
+    setCart((prev) => {
       const newCart = new Map(prev);
-      const currentQty: number = newCart.get(slotId) ?? 0;
+      const currentQty = newCart.get(slotId) ?? 0;
       if (currentQty > 1) newCart.set(slotId, currentQty - 1);
       else newCart.delete(slotId);
       return newCart;
@@ -75,7 +76,7 @@ export default function KioskSimulator({ machineId = 1 }: Props) {
   };
 
   const handleRemoveItem = (slotId: number) => {
-    setCart((prev: Map<number, number>) => {
+    setCart((prev) => {
       const newCart = new Map(prev);
       newCart.delete(slotId);
       return newCart;
@@ -89,7 +90,8 @@ export default function KioskSimulator({ machineId = 1 }: Props) {
 
   // 3. NGHIỆP VỤ TẠO ĐƠN & THANH TOÁN
   const handleCheckout = async () => {
-    if (cart.size === 0) return; 
+    // [FIX] Bổ sung guard isProcessing tránh tạo trùng đơn hàng khi nhấn liên tiếp
+    if (cart.size === 0 || isProcessing) return;
     setIsProcessing(true);
     try {
       const payload: CreateOrderRequest = {
@@ -103,8 +105,8 @@ export default function KioskSimulator({ machineId = 1 }: Props) {
       if (!payload.items.length) throw new Error('Giỏ hàng không còn sản phẩm hợp lệ.');
       const order = await kioskService.createOrder(payload);
       setCurrentOrder(order);
-      setPaymentStatus('PENDING');
       setTimeLeft(60);
+      setPaymentStatus('PENDING');
     } catch (error: unknown) {
       console.error(error);
       alert('Không thể tạo đơn hàng. Vui lòng kiểm tra lại kết nối mạng.');
@@ -119,29 +121,39 @@ export default function KioskSimulator({ machineId = 1 }: Props) {
     const orderId = currentOrder.orderId;
 
     if (paymentStatus === 'PENDING') {
+      // [FIX] Chỉ giảm bộ đếm thuần túy, không gọi setPaymentStatus bên trong updater
       timerRef.current = setInterval(() => {
-        setTimeLeft((prev) => {
-          if (prev <= 1) {
-            setPaymentStatus('EXPIRED');
-            return 0;
-          }
-          return prev - 1;
-        });
+        setTimeLeft((prev) => (prev > 0 ? prev - 1 : 0));
       }, 1000);
     }
 
     let active = true;
+    // [FIX] Ngăn gửi chồng request khi phản hồi mạng chậm hơn chu kỳ 2 giây
+    let isChecking = false;
+
     const checkStatus = async () => {
+      if (isChecking) return;
+      isChecking = true;
       try {
         const latest = await kioskService.getOrderStatus(orderId);
         if (!active) return;
         setCurrentOrder(latest);
-        if (latest.paymentStatus === 'SUCCESS' && latest.dispenseStatus === 'COMPLETED') setPaymentStatus('DISPENSING');
-        else if (latest.paymentStatus === 'SUCCESS') setPaymentStatus('SUCCESS');
-        else if (latest.paymentStatus === 'FAILED') setPaymentStatus('FAILED');
-        else if (latest.dispenseStatus === 'JAMMED') setPaymentStatus('JAMMED');
+
+        // [FIX] Ưu tiên kiểm tra lỗi kẹt hàng (JAMMED) trước trạng thái trung gian SUCCESS
+        if (latest.dispenseStatus === 'JAMMED') {
+          setPaymentStatus('JAMMED');
+        } else if (latest.paymentStatus === 'SUCCESS' && latest.dispenseStatus === 'COMPLETED') {
+          setResetTimer(5);
+          setPaymentStatus('DISPENSING');
+        } else if (latest.paymentStatus === 'SUCCESS') {
+          setPaymentStatus('SUCCESS');
+        } else if (latest.paymentStatus === 'FAILED') {
+          setPaymentStatus('FAILED');
+        }
       } catch (error) {
         console.error('Không thể cập nhật trạng thái đơn hàng:', error);
+      } finally {
+        isChecking = false;
       }
     };
     void checkStatus();
@@ -149,38 +161,55 @@ export default function KioskSimulator({ machineId = 1 }: Props) {
 
     return () => {
       active = false;
-      if (timerRef.current) clearInterval(timerRef.current);
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
       clearInterval(polling);
     };
-  }, [currentOrder?.orderId, paymentStatus]);
+  }, [currentOrder, paymentStatus]);
+
+  // [FIX] Tách chuyển trạng thái EXPIRED ra effect riêng khi đồng hồ chạm 0
+  useEffect(() => {
+    if (paymentStatus === 'PENDING' && timeLeft === 0) {
+      setPaymentStatus('EXPIRED');
+    }
+  }, [paymentStatus, timeLeft]);
 
   // HÀM RESET
   const handleResetKiosk = useCallback(() => {
     setPaymentStatus('IDLE');
     setCurrentOrder(null);
     setCart(new Map());
+    // [FIX] Đưa đồng hồ về mặc định để tránh lệch trạng thái ở giao dịch tiếp theo
+    setTimeLeft(60);
+    setResetTimer(5);
     fetchMachineData(); 
   }, [fetchMachineData]);
 
   // 5. Xử lý màn hình Xuất hàng (Dispensing) sau khi SUCCESS
   useEffect(() => {
     if (paymentStatus === 'DISPENSING') {
-      setResetTimer(5);
+      // [FIX] Chỉ giảm bộ đếm thuần túy trong interval
       resetTimerRef.current = setInterval(() => {
-        setResetTimer((prev) => {
-          if (prev <= 1) {
-            handleResetKiosk();
-            return 0;
-          }
-          return prev - 1;
-        });
+        setResetTimer((prev) => (prev > 0 ? prev - 1 : 0));
       }, 1000);
       
       return () => {
-        if (resetTimerRef.current) clearInterval(resetTimerRef.current);
+        if (resetTimerRef.current) {
+          clearInterval(resetTimerRef.current);
+          resetTimerRef.current = null;
+        }
       };
     }
-  }, [paymentStatus, handleResetKiosk]);
+  }, [paymentStatus]);
+
+  // [FIX] Tự động reset kiosk trong effect riêng khi bộ đếm xuất hàng về 0
+  useEffect(() => {
+    if (paymentStatus === 'DISPENSING' && resetTimer === 0) {
+      handleResetKiosk();
+    }
+  }, [paymentStatus, resetTimer, handleResetKiosk]);
 
   // --- RENDER GIAO DIỆN ---
   if (loading) return <div className="h-screen w-full bg-white flex items-center justify-center"><RefreshCw className="animate-spin text-emerald-600 w-16 h-16"/></div>;
@@ -194,7 +223,9 @@ export default function KioskSimulator({ machineId = 1 }: Props) {
     </div>
   );
 
-  const filteredSlots = slots.filter(s => s.productName.toLowerCase().includes(searchQuery.toLowerCase()));
+  // [FIX] Phòng vệ giá trị rỗng và khoảng trắng thừa khi tìm kiếm
+  const normalizedQuery = searchQuery.trim().toLowerCase();
+  const filteredSlots = slots.filter(s => (s.productName ?? '').toLowerCase().includes(normalizedQuery));
 
   return (
     <div className="h-screen w-full bg-gray-100 flex overflow-hidden font-sans relative select-none">
@@ -377,7 +408,10 @@ export default function KioskSimulator({ machineId = 1 }: Props) {
                   {paymentStatus === 'EXPIRED' ? 'Hết thời gian chờ thanh toán' : paymentStatus === 'JAMMED' ? 'Máy gặp sự cố khi nhả hàng' : 'Giao dịch thất bại'}
                 </h2>
                 <p className="text-gray-500 text-xl mb-10">{paymentStatus === 'JAMMED' && currentOrder?.refundVoucherCode ? `Mã voucher hỗ trợ: ${currentOrder.refundVoucherCode}` : paymentStatus === 'EXPIRED' ? 'Đã hết thời gian chờ trên màn hình. Backend chưa có API hủy/hết hạn đơn; vui lòng xác nhận trạng thái đơn với nhân viên trước khi thanh toán lại.' : 'Vui lòng thử lại hoặc chọn mặt hàng khác.'}</p>
-                {paymentStatus !== 'EXPIRED' && <button onClick={handleResetKiosk} className="w-full py-4 bg-gray-800 text-white rounded-2xl font-black text-xl shadow-lg">LÀM LẠI TỪ ĐẦU</button>}
+                {/* [FIX] Mở lối thoát cho trạng thái EXPIRED để tránh khóa chết màn hình kiosk */}
+                <button onClick={handleResetKiosk} className="w-full py-4 bg-gray-800 text-white rounded-2xl font-black text-xl shadow-lg">
+                  {paymentStatus === 'EXPIRED' ? 'QUAY LẠI MÀN HÌNH CHÍNH' : 'LÀM LẠI TỪ ĐẦU'}
+                </button>
               </div>
             )}
             
