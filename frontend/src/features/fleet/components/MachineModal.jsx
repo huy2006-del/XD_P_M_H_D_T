@@ -1,6 +1,18 @@
 import React from 'react';
 import { X, Thermometer, Droplets, DoorClosed, Clock } from 'lucide-react';
 
+function formatOperatorLabel(operator) {
+  const displayName =
+    operator.fullName || operator.name || operator.username || `Operator #${operator.id}`;
+  if (operator.username && operator.username !== displayName) {
+    return `${displayName} (@${operator.username})`;
+  }
+  if (operator.email) {
+    return `${displayName} (${operator.email})`;
+  }
+  return displayName;
+}
+
 export const MachineModal = ({
   isOpen,
   handleCloseModal,
@@ -9,11 +21,17 @@ export const MachineModal = ({
   formData,
   handleFormChange,
   locations = [],
+  operators = [],
   saving = false,
   error = '',
   detailLoading = false,
 }) => {
   if (!isOpen) return null;
+
+  // Giữ lại option hiện tại nếu máy đang sửa được gán cho Operator không còn trong danh sách tải về
+  const hasCurrentOperatorInList =
+    !formData.operatorId ||
+    operators.some((op) => String(op.id) === String(formData.operatorId));
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -139,20 +157,36 @@ export const MachineModal = ({
             </select>
           </div>
 
+          {/* [FE3] Thay ô nhập số operatorId mặc định 1 bằng Dropdown user role OPERATOR */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Operator ID <span className="text-red-500">*</span>
+              Nhân viên vận hành (OPERATOR) <span className="text-red-500">*</span>
             </label>
-            <input
-              type="number"
+            <select
               name="operatorId"
               value={formData.operatorId}
               onChange={handleFormChange}
-              min="1"
-              step="1"
               required
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 sm:text-sm"
-            />
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 sm:text-sm bg-white"
+            >
+              <option value="">
+                {operators.length > 0
+                  ? 'Chọn nhân viên vận hành'
+                  : 'Chưa tải được danh sách Operator'}
+              </option>
+              {!hasCurrentOperatorInList && formData.operatorId && (
+                <option value={formData.operatorId}>
+                  {editingMachine?.operator && editingMachine.operator !== 'Chưa phân công'
+                    ? `${editingMachine.operator} (#${formData.operatorId})`
+                    : `Operator #${formData.operatorId}`}
+                </option>
+              )}
+              {operators.map((operator) => (
+                <option key={operator.id} value={operator.id}>
+                  {formatOperatorLabel(operator)}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -225,7 +259,7 @@ export const MachineModal = ({
             </button>
             <button
               type="submit"
-              disabled={saving || locations.length === 0}
+              disabled={saving || locations.length === 0 || (operators.length === 0 && !formData.operatorId)}
               className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 shadow-sm disabled:opacity-50"
             >
               {saving ? 'Đang lưu...' : editingMachine ? 'Cập nhật' : 'Lưu máy mới'}
