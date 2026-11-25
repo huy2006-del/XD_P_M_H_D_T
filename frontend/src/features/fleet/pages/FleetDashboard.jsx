@@ -43,12 +43,37 @@ function resolveTelemetryFreshness(lastIso, status, isTelemetryLoading) {
   return 'FRESH';
 }
 
-function mapMachineFromApi(machine, latestTelemetry, telemetryLoading, unresolvedCount) {
+// [FE3] Chuẩn hóa & lọc danh sách tài khoản có vai trò OPERATOR từ Backend
+function extractOperatorsFromResponse(rawData) {
+  const list = Array.isArray(rawData) ? rawData : rawData?.content ?? [];
+  return list.filter((user) => {
+    if (user?.role) {
+      return String(user.role).toUpperCase().includes('OPERATOR');
+    }
+    if (Array.isArray(user?.roles)) {
+      return user.roles.some((r) =>
+        String(typeof r === 'string' ? r : r?.name ?? r?.authority ?? '')
+          .toUpperCase()
+          .includes('OPERATOR')
+      );
+    }
+    return true;
+  });
+}
+
+function mapMachineFromApi(
+  machine,
+  latestTelemetry,
+  telemetryLoading,
+  unresolvedCount,
+  operatorLookup = {}
+) {
   const lastPingIso = latestTelemetry?.recordedAt || machine.lastPingAt || null;
   const currentTemp =
     latestTelemetry?.temperature ?? machine.currentTemp ?? null;
   const currentHumidity =
     latestTelemetry?.humidity ?? machine.currentHumidity ?? null;
+  const resolvedOperatorId = machine.operator?.id ?? machine.operatorId ?? null;
 
   return {
     id: String(machine.id),
@@ -60,6 +85,7 @@ function mapMachineFromApi(machine, latestTelemetry, telemetryLoading, unresolve
     operator:
       machine.operator?.fullName ??
       machine.operator?.name ??
+      (resolvedOperatorId != null ? operatorLookup[Number(resolvedOperatorId)] : null) ??
       'Chưa phân công',
     status: machine.status ?? 'OFFLINE',
     lastPingIso,
@@ -67,7 +93,7 @@ function mapMachineFromApi(machine, latestTelemetry, telemetryLoading, unresolve
       ? new Date(lastPingIso).toLocaleString('vi-VN')
       : 'Chưa có dữ liệu',
     locationId: machine.location?.id ?? null,
-    operatorId: machine.operator?.id ?? null,
+    operatorId: resolvedOperatorId,
     model: machine.model ?? '',
     tempMinThreshold: machine.tempMinThreshold ?? 2,
     tempMaxThreshold: machine.tempMaxThreshold ?? 8,
@@ -91,6 +117,7 @@ export default function FleetDashboard() {
   const [telemetryLoading, setTelemetryLoading] = useState(false);
   const [alerts, setAlerts] = useState([]);
   const [locations, setLocations] = useState([]);
+  const [operators, setOperators] = useState([]);
 
   const [viewMode, setViewMode] = useState('TABLE');
   const [searchTerm, setSearchTerm] = useState('');
@@ -110,7 +137,7 @@ export default function FleetDashboard() {
     name: '',
     model: '',
     locationId: '',
-    operatorId: '1',
+    operatorId: '',
     tempMinThreshold: '2',
     tempMaxThreshold: '8',
     status: 'ONLINE',
@@ -154,10 +181,14 @@ export default function FleetDashboard() {
       setLoading(true);
       setError('');
 
-      const [machineRes, locationRes, alertList] = await Promise.all([
+      const [machineRes, locationRes, alertList, operatorRes] = await Promise.all([
         axiosInstance.get('/api/v1/machines'),
         axiosInstance.get('/api/v1/locations'),
         alertService.getAlerts(),
+        // [FE3] Tải danh sách tài khoản role OPERATOR (không làm gián đoạn trang nếu BE tạm lỗi endpoint users)
+        axiosInstance
+          .get('/api/v1/users', { params: { role: 'OPERATOR' } })
+          .catch(() => ({ data: [] })),
       ]);
 
       if (!Array.isArray(machineRes.data)) {
@@ -170,6 +201,7 @@ export default function FleetDashboard() {
       setRawMachines(machineRes.data);
       setLocations(locationRes.data);
       setAlerts(alertList);
+      setOperators(extractOperatorsFromResponse(operatorRes.data));
       void fetchLatestTelemetryForMachines(machineRes.data);
     } catch (err) {
       console.error('Fetch fleet data failed:', err);
@@ -202,6 +234,16 @@ export default function FleetDashboard() {
     }
   });
 
+  const operatorLookup = useMemo(() => {
+    const map = {};
+    for (const op of operators) {
+      if (op?.id != null) {
+        map[Number(op.id)] = op.fullName ?? op.name ?? op.username ?? `Operator #${op.id}`;
+      }
+    }
+    return map;
+  }, [operators]);
+
   const unresolvedCountByMachine = useMemo(() => {
     const counts = {};
     for (const alert of alerts) {
@@ -218,10 +260,11 @@ export default function FleetDashboard() {
         m,
         telemetryByMachine[Number(m.id)] || null,
         telemetryLoading,
-        unresolvedCountByMachine[Number(m.id)] || 0
+        unresolvedCountByMachine[Number(m.id)] || 0,
+        operatorLookup
       )
     );
-  }, [rawMachines, telemetryByMachine, telemetryLoading, unresolvedCountByMachine]);
+  }, [rawMachines, telemetryByMachine, telemetryLoading, unresolvedCountByMachine, operatorLookup]);
 
   const filteredMachines = useMemo(() => {
     const q = searchTerm.trim().toLowerCase();
@@ -259,7 +302,7 @@ export default function FleetDashboard() {
       setFormData({
         ...machine,
         locationId: machine.locationId == null ? '' : String(machine.locationId),
-        operatorId: machine.operatorId == null ? '1' : String(machine.operatorId),
+        operatorId: machine.operatorId == null ? '' : String(machine.operatorId),
         tempMinThreshold: String(machine.tempMinThreshold ?? 2),
         tempMaxThreshold: String(machine.tempMaxThreshold ?? 8),
       });
@@ -280,7 +323,8 @@ export default function FleetDashboard() {
           detailRes.data,
           latest,
           false,
-          unresolvedCountByMachine[Number(machine.id)] || 0
+          unresolvedCountByMachine[Number(machine.id)] || 0,
+          operatorLookup
         );
         setEditingMachine(freshMapped);
         setFormData({
@@ -288,7 +332,7 @@ export default function FleetDashboard() {
           locationId:
             freshMapped.locationId == null ? '' : String(freshMapped.locationId),
           operatorId:
-            freshMapped.operatorId == null ? '1' : String(freshMapped.operatorId),
+            freshMapped.operatorId == null ? '' : String(freshMapped.operatorId),
           tempMinThreshold: String(freshMapped.tempMinThreshold ?? 2),
           tempMaxThreshold: String(freshMapped.tempMaxThreshold ?? 8),
         });
@@ -304,7 +348,7 @@ export default function FleetDashboard() {
         name: '',
         model: '',
         locationId: locations[0]?.id ? String(locations[0].id) : '',
-        operatorId: '1',
+        operatorId: operators[0]?.id ? String(operators[0].id) : '',
         tempMinThreshold: '2',
         tempMaxThreshold: '8',
         status: 'ONLINE',
@@ -337,7 +381,7 @@ export default function FleetDashboard() {
       return;
     }
     if (!Number.isInteger(operatorId) || operatorId <= 0) {
-      setSaveError('Operator ID phải là số nguyên dương.');
+      setSaveError('Vui lòng chọn nhân viên vận hành (Operator) hợp lệ.');
       return;
     }
     if (
@@ -554,6 +598,7 @@ export default function FleetDashboard() {
         formData={formData}
         handleFormChange={handleFormChange}
         locations={locations}
+        operators={operators}
         saving={saving}
         error={saveError}
         detailLoading={detailLoading}
