@@ -3,6 +3,8 @@ import { useNavigate, useParams } from 'react-router-dom';
 import {
   Activity,
   ArrowLeft,
+  Cpu,
+  DoorOpen,
   Power,
   RefreshCw,
   Snowflake,
@@ -24,13 +26,28 @@ import { alarmAudio } from './utils/audioAlarm';
 import type {
   ColdChainStatus,
   DataFreshnessState,
+  DoorSensorState,
+  MachineConnectionState,
   MachineDetailDto,
+  SensorHealthState,
   TelemetryPoint,
 } from './types';
 
 const MAX_CHART_POINTS = 40;
 const STALE_THRESHOLD_MS = 30_000;
 const CRITICAL_TEMP_THRESHOLD = 12.0;
+
+interface RawTelemetryDto {
+  id?: number;
+  machineId?: number;
+  temperature: number | null;
+  humidity: number | null;
+  recordedAt: string;
+  doorOpen?: boolean | null;
+  doorStatus?: string | null;
+  sensorStatus?: string | null;
+  sensorError?: string | null;
+}
 
 function formatTime(isoString?: string | null) {
   if (!isoString) return '--:--:--';
@@ -56,17 +73,22 @@ function formatRelativeAge(isoString: string | null | undefined, nowMs: number) 
   return `${absolute} (${diffHours} giờ trước)`;
 }
 
-function formatDoorLabel(machine: MachineDetailDto | null): string {
-  if (!machine) return 'Chưa có dữ liệu';
-  if (typeof machine.doorOpen === 'boolean') {
-    return machine.doorOpen ? 'Đang mở' : 'Đã đóng';
+function detectSensorFault(
+  temp: number | null,
+  humidity: number | null,
+  sensorStatus?: string | null,
+  sensorError?: string | null
+): string | null {
+  if (sensorStatus && ['FAULT', 'ERROR', 'DISCONNECTED'].includes(sensorStatus.toUpperCase())) {
+    return sensorError || `Cảm biến báo trạng thái ${sensorStatus}.`;
   }
-  if (machine.doorStatus) {
-    if (machine.doorStatus === 'OPEN') return 'Đang mở';
-    if (machine.doorStatus === 'CLOSED') return 'Đã đóng';
-    return machine.doorStatus;
+  if (temp !== null && (!Number.isFinite(temp) || temp < -40 || temp > 80)) {
+    return `Giá trị nhiệt độ bất thường (${temp}°C), ngoài dải hoạt động hợp lệ (-40°C đến 80°C).`;
   }
-  return 'Chưa có cảm biến từ BE';
+  if (humidity !== null && (!Number.isFinite(humidity) || humidity < 0 || humidity > 100)) {
+    return `Giá trị độ ẩm bất thường (${humidity}%), ngoài dải hợp lệ (0%–100%).`;
+  }
+  return null;
 }
 
 export const ColdChainMonitorPage: React.FC = () => {
@@ -85,9 +107,19 @@ export const ColdChainMonitorPage: React.FC = () => {
   const [resolvingAlert, setResolvingAlert] = useState<AlertItem | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
 
-  // Chỉ cập nhật đồng hồ để tính trạng thái dữ liệu cũ (STALE), không tạo dữ liệu giả
+  // Chế độ mô phỏng cục bộ cho Cửa mở & Lỗi cảm biến (BE SimulatorController hiện chưa có 2 endpoint này)
+  const [simulatedDoorOpenSince, setSimulatedDoorOpenSince] = useState<number | null>(null);
+  const [simulatedSensorFault, setSimulatedSensorFault] = useState<boolean>(false);
+
+  // Reset mô phỏng cục bộ khi đổi sang máy khác
   useEffect(() => {
-    const interval = setInterval(() => setNowMs(Date.now()), 5000);
+    setSimulatedDoorOpenSince(null);
+    setSimulatedSensorFault(false);
+  }, [machineId]);
+
+  // Đồng hồ cập nhật trạng thái dữ liệu cũ (STALE) & thời gian cửa mở — không sinh dữ liệu telemetry giả
+  useEffect(() => {
+    const interval = setInterval(() => setNowMs(Date.now()), 2000);
     return () => clearInterval(interval);
   }, []);
 
@@ -107,19 +139,11 @@ export const ColdChainMonitorPage: React.FC = () => {
   const fetchHistory = useCallback(async () => {
     try {
       setLoadingTelemetry(true);
-      const res = await axiosInstance.get<
-        Array<{
-          id?: number;
-          machineId?: number;
-          temperature: number;
-          humidity: number;
-          recordedAt: string;
-        }>
-      >(`/api/v1/machines/${machineId}/telemetry/history`, {
-        params: { limit: 30 },
-      });
+      const res = await axiosInstance.get<RawTelemetryDto[]>(
+        `/api/v1/machines/${machineId}/telemetry/history`,
+        { params: { limit: 30 } }
+      );
       const list = Array.isArray(res.data) ? res.data : [];
-      // Backend trả DESC (mới nhất trước) -> đảo chiều về ASC để vẽ biểu đồ theo thời gian
       const formatted: TelemetryPoint[] = list
         .slice()
         .reverse()
@@ -131,6 +155,10 @@ export const ColdChainMonitorPage: React.FC = () => {
           recordedAt: item.recordedAt,
           timeLabel: formatTime(item.recordedAt),
           source: 'HISTORY',
+          doorOpen: item.doorOpen ?? null,
+          doorStatus: item.doorStatus ?? null,
+          sensorStatus: item.sensorStatus ?? null,
+          sensorError: item.sensorError ?? null,
         }));
       setDataPoints(formatted);
     } catch (err) {
@@ -160,46 +188,53 @@ export const ColdChainMonitorPage: React.FC = () => {
   }, [fetchMachinesAndDetail, fetchHistory, fetchAlerts]);
 
   // 1. WebSocket topic telemetry theo machineId
-  const telemetryWs = useWebSocketSubscription<{
-    id?: number;
-    machineId?: number;
-    temperature: number;
-    humidity: number;
-    recordedAt: string;
-  }>(`/topic/telemetry/${machineId}`, (incoming) => {
-    if (!incoming || typeof incoming.temperature !== 'number') return;
+  const telemetryWs = useWebSocketSubscription<RawTelemetryDto>(
+    `/topic/telemetry/${machineId}`,
+    (incoming) => {
+      if (!incoming) return;
 
-    const nextPoint: TelemetryPoint = {
-      id: incoming.id,
-      machineId: incoming.machineId ?? machineId,
-      temperature: Number(incoming.temperature),
-      humidity: Number(incoming.humidity),
-      recordedAt: incoming.recordedAt || new Date().toISOString(),
-      timeLabel: formatTime(incoming.recordedAt),
-      source: 'REALTIME',
-    };
+      const tempVal = incoming.temperature === null ? Number.NaN : Number(incoming.temperature);
+      const humVal = incoming.humidity === null ? Number.NaN : Number(incoming.humidity);
 
-    setDataPoints((prev) => {
-      if (nextPoint.id && prev.some((p) => p.id === nextPoint.id)) {
-        return prev;
-      }
-      const updated = [...prev, nextPoint];
-      return updated.length > MAX_CHART_POINTS
-        ? updated.slice(updated.length - MAX_CHART_POINTS)
-        : updated;
-    });
+      const nextPoint: TelemetryPoint = {
+        id: incoming.id,
+        machineId: incoming.machineId ?? machineId,
+        temperature: tempVal,
+        humidity: humVal,
+        recordedAt: incoming.recordedAt || new Date().toISOString(),
+        timeLabel: formatTime(incoming.recordedAt),
+        source: 'REALTIME',
+        doorOpen: incoming.doorOpen ?? null,
+        doorStatus: incoming.doorStatus ?? null,
+        sensorStatus: incoming.sensorStatus ?? null,
+        sensorError: incoming.sensorError ?? null,
+      };
 
-    setMachineDetail((prev) =>
-      prev
-        ? {
-            ...prev,
-            currentTemp: nextPoint.temperature,
-            currentHumidity: nextPoint.humidity,
-            lastPingAt: nextPoint.recordedAt,
-          }
-        : prev
-    );
-  });
+      setDataPoints((prev) => {
+        if (nextPoint.id && prev.some((p) => p.id === nextPoint.id)) {
+          return prev;
+        }
+        const updated = [...prev, nextPoint];
+        return updated.length > MAX_CHART_POINTS
+          ? updated.slice(updated.length - MAX_CHART_POINTS)
+          : updated;
+      });
+
+      setMachineDetail((prev) =>
+        prev
+          ? {
+              ...prev,
+              currentTemp: Number.isFinite(tempVal) ? tempVal : prev.currentTemp,
+              currentHumidity: Number.isFinite(humVal) ? humVal : prev.currentHumidity,
+              lastPingAt: nextPoint.recordedAt,
+              doorOpen: incoming.doorOpen ?? prev.doorOpen,
+              doorStatus: incoming.doorStatus ?? prev.doorStatus,
+              sensorStatus: incoming.sensorStatus ?? prev.sensorStatus,
+            }
+          : prev
+      );
+    }
+  );
 
   // 2. WebSocket topic alerts toàn hệ thống
   const alertsWs = useWebSocketSubscription<AlertItem>('/topic/alerts', (incomingAlert) => {
@@ -213,7 +248,6 @@ export const ColdChainMonitorPage: React.FC = () => {
       return [incomingAlert, ...prev];
     });
 
-    // Khi máy hiện tại bị cảnh báo CRITICAL, BE tự đổi status sang OUT_OF_ORDER -> đồng bộ lại chi tiết máy
     if (incomingAlert.machineId === machineId && incomingAlert.severity === 'CRITICAL') {
       void fetchMachinesAndDetail();
     }
@@ -224,36 +258,121 @@ export const ColdChainMonitorPage: React.FC = () => {
   const latestPoint = dataPoints.length > 0 ? dataPoints[dataPoints.length - 1] : null;
   const latestTimestamp = latestPoint?.recordedAt || machineDetail?.lastPingAt || null;
 
-  const currentTemp = latestPoint
+  const rawTemp = latestPoint
     ? latestPoint.temperature
     : machineDetail?.currentTemp ?? null;
-  const currentHumidity = latestPoint
+  const rawHumidity = latestPoint
     ? latestPoint.humidity
     : machineDetail?.currentHumidity ?? null;
 
   const freshness: DataFreshnessState = useMemo(() => {
     if (loadingTelemetry) return 'LOADING';
-    if (!latestPoint && currentTemp === null) return 'EMPTY';
+    if (!latestPoint && rawTemp === null) return 'EMPTY';
     if (!latestTimestamp) return 'STALE';
     const ageMs = nowMs - new Date(latestTimestamp).getTime();
-    if (
-      ageMs > STALE_THRESHOLD_MS ||
-      machineDetail?.status === 'OFFLINE'
-    ) {
+    if (ageMs > STALE_THRESHOLD_MS || machineDetail?.status === 'OFFLINE') {
       return 'STALE';
     }
     return 'FRESH';
-  }, [loadingTelemetry, latestPoint, currentTemp, latestTimestamp, nowMs, machineDetail?.status]);
+  }, [loadingTelemetry, latestPoint, rawTemp, latestTimestamp, nowMs, machineDetail?.status]);
+
+  // Trạng thái kết nối thiết bị tách biệt hoàn toàn với trạng thái WebSocket & cảm biến
+  const machineConnection: MachineConnectionState = useMemo(() => {
+    if (!machineDetail) return 'UNKNOWN';
+    if (machineDetail.status === 'OFFLINE') return 'OFFLINE';
+    if (machineDetail.status === 'MAINTENANCE') return 'MAINTENANCE';
+    if (machineDetail.status === 'OUT_OF_ORDER' || machineDetail.status === 'ERROR') {
+      return 'OUT_OF_ORDER';
+    }
+    if (latestTimestamp) {
+      const ageMs = nowMs - new Date(latestTimestamp).getTime();
+      if (ageMs > STALE_THRESHOLD_MS) return 'STALE_PING';
+    }
+    return 'CONNECTED';
+  }, [machineDetail, latestTimestamp, nowMs]);
+
+  // Trạng thái sức khỏe cảm biến (phát hiện lỗi từ dữ liệu BE hoặc chế độ mô phỏng lỗi cảm biến)
+  const detectedFaultReason = useMemo(() => {
+    if (simulatedSensorFault) {
+      return 'Mô phỏng mất tín hiệu đầu dò nhiệt độ/độ ẩm (chế độ test FE — chờ BE3 bổ sung API sensor-fault).';
+    }
+    return detectSensorFault(
+      rawTemp,
+      rawHumidity,
+      latestPoint?.sensorStatus ?? machineDetail?.sensorStatus,
+      latestPoint?.sensorError
+    );
+  }, [
+    simulatedSensorFault,
+    rawTemp,
+    rawHumidity,
+    latestPoint?.sensorStatus,
+    latestPoint?.sensorError,
+    machineDetail?.sensorStatus,
+  ]);
+
+  const sensorHealth: SensorHealthState = useMemo(() => {
+    if (detectedFaultReason) return 'FAULT';
+    if (freshness === 'EMPTY' || freshness === 'LOADING') return 'NO_DATA';
+    if (freshness === 'STALE') return 'STALE';
+    return 'OK';
+  }, [detectedFaultReason, freshness]);
+
+  // Trạng thái cửa tủ (ưu tiên trạng thái mô phỏng nếu đang bật, sau đó đọc field từ BE nếu có)
+  const { doorState, doorLabel, isDoorSimulated } = useMemo<{
+    doorState: DoorSensorState;
+    doorLabel: string;
+    isDoorSimulated: boolean;
+  }>(() => {
+    if (simulatedDoorOpenSince !== null) {
+      const openSec = Math.max(0, Math.floor((nowMs - simulatedDoorOpenSince) / 1000));
+      return {
+        doorState: 'OPEN',
+        doorLabel: `Đang mở (${openSec}s)`,
+        isDoorSimulated: true,
+      };
+    }
+
+    const beDoorOpen = latestPoint?.doorOpen ?? machineDetail?.doorOpen;
+    const beDoorStatus = latestPoint?.doorStatus ?? machineDetail?.doorStatus;
+
+    if (typeof beDoorOpen === 'boolean') {
+      return {
+        doorState: beDoorOpen ? 'OPEN' : 'CLOSED',
+        doorLabel: beDoorOpen ? 'Đang mở' : 'Đã đóng',
+        isDoorSimulated: false,
+      };
+    }
+    if (beDoorStatus) {
+      const upper = beDoorStatus.toUpperCase();
+      if (upper === 'OPEN' || upper === 'AJAR') {
+        return { doorState: 'OPEN', doorLabel: 'Đang mở', isDoorSimulated: false };
+      }
+      if (upper === 'CLOSED') {
+        return { doorState: 'CLOSED', doorLabel: 'Đã đóng', isDoorSimulated: false };
+      }
+      return { doorState: 'UNKNOWN', doorLabel: beDoorStatus, isDoorSimulated: false };
+    }
+    return {
+      doorState: 'UNKNOWN',
+      doorLabel: 'Chưa có cảm biến từ BE',
+      isDoorSimulated: false,
+    };
+  }, [simulatedDoorOpenSince, nowMs, latestPoint, machineDetail]);
 
   const currentStatus: ColdChainStatus = useMemo(() => {
-    if (currentTemp === null) return 'NO_DATA';
-    if (currentTemp > CRITICAL_TEMP_THRESHOLD) return 'CRITICAL';
-    if (currentTemp > maxThreshold || currentTemp < minThreshold) return 'WARNING';
+    if (sensorHealth === 'FAULT') return 'SENSOR_ERROR';
+    if (rawTemp === null || !Number.isFinite(rawTemp)) return 'NO_DATA';
+    if (rawTemp > CRITICAL_TEMP_THRESHOLD) return 'CRITICAL';
+    if (rawTemp > maxThreshold || rawTemp < minThreshold) return 'WARNING';
     return 'SAFE';
-  }, [currentTemp, minThreshold, maxThreshold]);
+  }, [sensorHealth, rawTemp, minThreshold, maxThreshold]);
 
   useEffect(() => {
-    if (currentStatus === 'CRITICAL' && freshness === 'FRESH' && !isMuted) {
+    const shouldAlarm =
+      (currentStatus === 'CRITICAL' && freshness === 'FRESH') ||
+      currentStatus === 'SENSOR_ERROR';
+    if (shouldAlarm && !isMuted) {
       alarmAudio.startAlarm();
     } else {
       alarmAudio.stopAlarm();
@@ -274,20 +393,30 @@ export const ColdChainMonitorPage: React.FC = () => {
     return map;
   }, [machines, machineDetail]);
 
-  const historyCount = useMemo(
-    () => dataPoints.filter((p) => p.source !== 'REALTIME').length,
+  // Chỉ đưa các điểm số hợp lệ vào biểu đồ Recharts
+  const validChartPoints = useMemo(
+    () =>
+      dataPoints.filter(
+        (p) => Number.isFinite(p.temperature) && Number.isFinite(p.humidity)
+      ),
     [dataPoints]
   );
+
+  const historyCount = useMemo(
+    () => validChartPoints.filter((p) => p.source !== 'REALTIME').length,
+    [validChartPoints]
+  );
   const realtimeCount = useMemo(
-    () => dataPoints.filter((p) => p.source === 'REALTIME').length,
-    [dataPoints]
+    () => validChartPoints.filter((p) => p.source === 'REALTIME').length,
+    [validChartPoints]
   );
 
   const handleSimulateTemp = async (temp: number, label: string) => {
     try {
       setSimulating(true);
+      setSimulatedSensorFault(false);
       await axiosInstance.post(
-        `/api/v1/simulator/machines/${machineId}/temp-spike`,
+        `/api/v1/simulator/machines/${machineId}/temperature-spike`,
         null,
         { params: { temp } }
       );
@@ -310,6 +439,30 @@ export const ColdChainMonitorPage: React.FC = () => {
       console.error('Lỗi bật/tắt nguồn máy:', err);
     } finally {
       setSimulating(false);
+    }
+  };
+
+  const handleToggleDoorSimulation = () => {
+    if (simulatedDoorOpenSince !== null) {
+      setSimulatedDoorOpenSince(null);
+      toast.success('Đã tắt chế độ mô phỏng cửa mở.');
+    } else {
+      setSimulatedDoorOpenSince(Date.now());
+      toast.warning(
+        'Đang bật mô phỏng Cửa mở trên FE (Backend SimulatorController chưa có endpoint cửa).'
+      );
+    }
+  };
+
+  const handleToggleSensorFaultSimulation = () => {
+    const next = !simulatedSensorFault;
+    setSimulatedSensorFault(next);
+    if (next) {
+      toast.error(
+        'Đang bật mô phỏng Lỗi cảm biến trên FE (Backend SimulatorController chưa có endpoint sensor-fault).'
+      );
+    } else {
+      toast.success('Đã khôi phục trạng thái cảm biến về dữ liệu thật.');
     }
   };
 
@@ -396,18 +549,20 @@ export const ColdChainMonitorPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Thanh điều khiển Simulator gọi trực tiếp Backend SimulatorController */}
-      <div className="bg-slate-900 p-4 rounded-2xl text-white flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 shadow-sm">
-        <div>
-          <span className="text-xs font-bold text-amber-400 uppercase tracking-wider block">
-            Điều khiển Simulator Backend (/api/v1/simulator/machines/{machineId})
-          </span>
-          <p className="text-xs text-slate-300 mt-0.5">
-            Gửi sự kiện vào Backend để kiểm thử luồng ghi DB → đánh giá cảnh báo → đẩy WebSocket về màn hình đang mở không cần reload.
-          </p>
+      {/* Thanh điều khiển Simulator (Backend API + Mô phỏng trạng thái cửa & lỗi cảm biến) */}
+      <div className="bg-slate-900 p-4 rounded-2xl text-white flex flex-col gap-3 shadow-sm">
+        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3">
+          <div>
+            <span className="text-xs font-bold text-amber-400 uppercase tracking-wider block">
+              Điều khiển Simulator (/api/v1/simulator/machines/{machineId})
+            </span>
+            <p className="text-xs text-slate-300 mt-0.5">
+              Nhiệt độ &amp; Nguồn gọi trực tiếp Backend Simulator; Cửa mở &amp; Lỗi cảm biến đang mô phỏng phía FE (sẵn sàng nối khi BE3 mở endpoint).
+            </p>
+          </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={() => void handleSimulateTemp(9.5, 'Cảnh báo nhiệt cao')}
             disabled={simulating}
@@ -439,15 +594,49 @@ export const ColdChainMonitorPage: React.FC = () => {
           >
             <Power className="w-3.5 h-3.5" /> Bật/Tắt nguồn
           </button>
+
+          <div className="h-6 w-px bg-slate-700 hidden sm:block mx-1" />
+
+          <button
+            onClick={handleToggleDoorSimulation}
+            className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-xl transition-colors ${
+              simulatedDoorOpenSince !== null
+                ? 'bg-orange-500 hover:bg-orange-600 text-white ring-2 ring-orange-300'
+                : 'bg-slate-800 hover:bg-slate-700 text-orange-300 border border-orange-500/40'
+            }`}
+          >
+            <DoorOpen className="w-3.5 h-3.5" />
+            {simulatedDoorOpenSince !== null ? 'Đóng cửa (Đang mở)' : 'Giả lập Cửa mở'}
+          </button>
+
+          <button
+            onClick={handleToggleSensorFaultSimulation}
+            className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-xl transition-colors ${
+              simulatedSensorFault
+                ? 'bg-purple-600 hover:bg-purple-700 text-white ring-2 ring-purple-300'
+                : 'bg-slate-800 hover:bg-slate-700 text-purple-300 border border-purple-500/40'
+            }`}
+          >
+            <Cpu className="w-3.5 h-3.5" />
+            {simulatedSensorFault ? 'Khôi phục cảm biến' : 'Giả lập Lỗi cảm biến'}
+          </button>
         </div>
       </div>
 
       <ColdChainStatusHeader
         status={currentStatus}
         freshness={freshness}
-        currentTemp={currentTemp}
-        currentHumidity={currentHumidity}
-        doorLabel={formatDoorLabel(machineDetail)}
+        machineConnection={machineConnection}
+        sensorHealth={sensorHealth}
+        sensorFaultMessage={detectedFaultReason}
+        doorState={doorState}
+        doorLabel={doorLabel}
+        isDoorSimulated={isDoorSimulated}
+        isSensorSimulated={simulatedSensorFault}
+        currentTemp={rawTemp !== null && Number.isFinite(rawTemp) ? rawTemp : null}
+        currentHumidity={
+          rawHumidity !== null && Number.isFinite(rawHumidity) ? rawHumidity : null
+        }
         machineStatus={machineDetail?.status}
         lastReceivedText={formatRelativeAge(latestTimestamp, nowMs)}
         minThreshold={minThreshold}
@@ -466,7 +655,7 @@ export const ColdChainMonitorPage: React.FC = () => {
       />
 
       <ColdChainRealtimeChart
-        data={dataPoints}
+        data={validChartPoints}
         machineId={machineId}
         machineName={displayName}
         minThreshold={minThreshold}

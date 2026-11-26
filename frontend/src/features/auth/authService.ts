@@ -1,6 +1,5 @@
-
 import { publicAxios } from "../../shared/api/axiosInstance";
-import type { UserProfile } from "./authTypes";
+import type { UserProfile, UserRole } from "./authTypes";
 
 export interface LoginRequest {
   username: string;
@@ -12,72 +11,52 @@ export interface LoginResponse {
   user: UserProfile;
 }
 
-// Chỉ bật Mock API trong môi trường development.
-const USE_MOCK_AUTH =
-  import.meta.env.DEV &&
-  import.meta.env.VITE_USE_MOCK_AUTH === "true";
-
-// Dữ liệu chỉ dùng để kiểm thử giao diện.
-const mockUsers = [
-  {
-    username: "admin",
-    password: "admin123",
-    user: {
-      id: "1",
-      username: "admin",
-      role: "ADMIN",
-    } satisfies UserProfile,
-  },
-  {
-    username: "operator",
-    password: "operator123",
-    user: {
-      id: "2",
-      username: "operator",
-      role: "OPERATOR",
-    } satisfies UserProfile,
-  },
-];
-
-async function mockLogin(
-  credentials: LoginRequest
-): Promise<LoginResponse> {
-  // Giả lập độ trễ mạng để kiểm thử loading.
-  await new Promise<void>((resolve) => {
-    setTimeout(resolve, 600);
-  });
-
-  const account = mockUsers.find(
-    (item) =>
-      item.username === credentials.username.trim() &&
-      item.password === credentials.password
-  );
-
-  if (!account) {
-    throw new Error("Tên đăng nhập hoặc mật khẩu không đúng.");
-  }
-
-  return {
-    token: `mock-token-${account.user.role.toLowerCase()}`,
-    user: account.user,
+interface RawLoginResponse {
+  token?: string;
+  user?: {
+    id?: string | number;
+    username?: string;
+    role?: string;
   };
 }
 
-export async function login(
-  credentials: LoginRequest
-): Promise<LoginResponse> {
-  if (USE_MOCK_AUTH) {
-    return mockLogin(credentials);
+// Giữ export hằng số để đảm bảo tương thích với các component đang import (luôn dùng API thật)
+export const USE_MOCK_AUTH = false;
+
+function normalizeRole(role?: string): UserRole {
+  const normalized = role?.trim().toUpperCase();
+  if (normalized === "ADMIN" || normalized === "OPERATOR") {
+    return normalized;
   }
-
-  // Endpoint và response này là giả định tạm thời.
-  // Cần đối chiếu Swagger/API contract của Backend.
-  const response = await publicAxios.post<LoginResponse>(
-    "/api/v1/auth/login",
-    credentials
-  );
-
-  return response.data;
+  throw new Error(`Vai trò người dùng không hợp lệ từ Backend: ${role ?? "EMPTY"}`);
 }
 
-export { USE_MOCK_AUTH };
+/**
+ * Contract đã đối chiếu với identity-service:
+ * POST /api/v1/auth/login -> LoginResponse { token, user: { id, username, role } }
+ */
+export async function login(credentials: LoginRequest): Promise<LoginResponse> {
+  const payload: LoginRequest = {
+    username: credentials.username.trim(),
+    password: credentials.password,
+  };
+
+  const response = await publicAxios.post<RawLoginResponse>(
+    "/api/v1/auth/login",
+    payload
+  );
+
+  const data = response.data;
+  if (!data?.token || !data.user?.username) {
+    throw new Error("Phản hồi đăng nhập từ máy chủ không đúng định dạng LoginResponse.");
+  }
+
+  return {
+    token: data.token,
+    user: {
+      id: String(data.user.id ?? ""),
+      username: data.user.username,
+      role: normalizeRole(data.user.role),
+    },
+  };
+}

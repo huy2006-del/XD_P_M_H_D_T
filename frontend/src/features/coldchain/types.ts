@@ -1,8 +1,25 @@
 import type { MachineStatusValue } from '../alerts/alertService';
 
-export type ColdChainStatus = 'SAFE' | 'WARNING' | 'CRITICAL' | 'NO_DATA';
+export type ColdChainStatus =
+  | 'SAFE'
+  | 'WARNING'
+  | 'CRITICAL'
+  | 'SENSOR_ERROR'
+  | 'NO_DATA';
 
 export type DataFreshnessState = 'LOADING' | 'EMPTY' | 'STALE' | 'FRESH';
+
+export type MachineConnectionState =
+  | 'CONNECTED'
+  | 'STALE_PING'
+  | 'OFFLINE'
+  | 'OUT_OF_ORDER'
+  | 'MAINTENANCE'
+  | 'UNKNOWN';
+
+export type SensorHealthState = 'OK' | 'FAULT' | 'STALE' | 'NO_DATA';
+
+export type DoorSensorState = 'CLOSED' | 'OPEN' | 'UNKNOWN';
 
 export interface TelemetryPoint {
   id?: number;
@@ -12,6 +29,11 @@ export interface TelemetryPoint {
   recordedAt: string;
   timeLabel: string;
   source?: 'HISTORY' | 'REALTIME';
+  // Các trường mở rộng sẵn sàng khi BE3 bổ sung cảm biến cửa / lỗi cảm biến
+  doorOpen?: boolean | null;
+  doorStatus?: 'OPEN' | 'CLOSED' | string | null;
+  sensorStatus?: 'OK' | 'FAULT' | 'ERROR' | string | null;
+  sensorError?: string | null;
 }
 
 export interface MachineLocationSummary {
@@ -40,8 +62,8 @@ export interface MachineDetailDto {
   tempMinThreshold?: number | null;
   tempMaxThreshold?: number | null;
   currentTemp?: number | null;
-  // Dự phòng khi BE3 bổ sung trường độ ẩm & cảm biến cửa vào MachineResponse
   currentHumidity?: number | null;
   doorStatus?: 'OPEN' | 'CLOSED' | string | null;
   doorOpen?: boolean | null;
+  sensorStatus?: 'OK' | 'FAULT' | 'ERROR' | string | null;
 }
