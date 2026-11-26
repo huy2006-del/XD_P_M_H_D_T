@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { CheckCircle2, RefreshCw, ShieldAlert, Check } from 'lucide-react';
+import { CheckCircle2, RefreshCw, ShieldAlert, Check, Search } from 'lucide-react';
 import { alertService, type AlertItem } from '../alertService';
 import { ResolveAlertModal } from '../ResolveAlertModal';
 import { toast } from 'sonner';
@@ -9,6 +9,8 @@ export const OperatorAlertsPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [selectedAlert, setSelectedAlert] = useState<AlertItem | null>(null);
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'RESOLVED'>('ACTIVE');
+  const [severityFilter, setSeverityFilter] = useState<'ALL' | 'CRITICAL' | 'WARNING'>('ALL');
+  const [searchTerm, setSearchTerm] = useState('');
 
   const fetchAlerts = useCallback(async () => {
     setLoading(true);
@@ -44,9 +46,20 @@ export const OperatorAlertsPage: React.FC = () => {
   };
 
   const filteredAlerts = alerts.filter((a) => {
-    if (statusFilter === 'ALL') return true;
-    if (statusFilter === 'ACTIVE') return a.status === 'ACTIVE' || a.status === 'ACKNOWLEDGED';
-    return a.status === 'RESOLVED';
+    const matchesStatus =
+      statusFilter === 'ALL'
+        ? true
+        : statusFilter === 'ACTIVE'
+          ? a.status === 'ACTIVE' || a.status === 'ACKNOWLEDGED'
+          : a.status === 'RESOLVED';
+    const matchesSeverity = severityFilter === 'ALL' || a.severity === severityFilter;
+    const query = searchTerm.trim().toLowerCase();
+    const matchesSearch =
+      !query ||
+      a.message.toLowerCase().includes(query) ||
+      (a.machineName || `Máy #${a.machineId}`).toLowerCase().includes(query) ||
+      String(a.id).includes(query);
+    return matchesStatus && matchesSeverity && matchesSearch;
   });
 
   return (
@@ -77,41 +90,66 @@ export const OperatorAlertsPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Filter tab */}
-      <div className="flex gap-2 border-b border-gray-200 pb-2">
-        <button
-          type="button"
-          onClick={() => setStatusFilter('ACTIVE')}
-          className={`px-4 py-2 rounded-lg text-sm font-bold transition-all cursor-pointer ${
-            statusFilter === 'ACTIVE'
-              ? 'bg-amber-500 text-white shadow-xs'
-              : 'text-gray-600 hover:bg-gray-100'
-          }`}
-        >
-          Cần xử lý ({alerts.filter((a) => a.status === 'ACTIVE' || a.status === 'ACKNOWLEDGED').length})
-        </button>
-        <button
-          type="button"
-          onClick={() => setStatusFilter('RESOLVED')}
-          className={`px-4 py-2 rounded-lg text-sm font-bold transition-all cursor-pointer ${
-            statusFilter === 'RESOLVED'
-              ? 'bg-emerald-600 text-white shadow-xs'
-              : 'text-gray-600 hover:bg-gray-100'
-          }`}
-        >
-          Đã xử lý xong ({alerts.filter((a) => a.status === 'RESOLVED').length})
-        </button>
-        <button
-          type="button"
-          onClick={() => setStatusFilter('ALL')}
-          className={`px-4 py-2 rounded-lg text-sm font-bold transition-all cursor-pointer ${
-            statusFilter === 'ALL'
-              ? 'bg-gray-800 text-white shadow-xs'
-              : 'text-gray-600 hover:bg-gray-100'
-          }`}
-        >
-          Tất cả ({alerts.length})
-        </button>
+      {/* Filter tab & search */}
+      <div className="flex flex-col md:flex-row justify-between gap-3 border-b border-gray-200 pb-3">
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setStatusFilter('ACTIVE')}
+            className={`px-4 py-2 rounded-lg text-sm font-bold transition-all cursor-pointer ${
+              statusFilter === 'ACTIVE'
+                ? 'bg-amber-500 text-white shadow-xs'
+                : 'text-gray-600 hover:bg-gray-100'
+            }`}
+          >
+            Cần xử lý ({alerts.filter((a) => a.status === 'ACTIVE' || a.status === 'ACKNOWLEDGED').length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setStatusFilter('RESOLVED')}
+            className={`px-4 py-2 rounded-lg text-sm font-bold transition-all cursor-pointer ${
+              statusFilter === 'RESOLVED'
+                ? 'bg-emerald-600 text-white shadow-xs'
+                : 'text-gray-600 hover:bg-gray-100'
+            }`}
+          >
+            Đã xử lý xong ({alerts.filter((a) => a.status === 'RESOLVED').length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setStatusFilter('ALL')}
+            className={`px-4 py-2 rounded-lg text-sm font-bold transition-all cursor-pointer ${
+              statusFilter === 'ALL'
+                ? 'bg-gray-800 text-white shadow-xs'
+                : 'text-gray-600 hover:bg-gray-100'
+            }`}
+          >
+            Tất cả ({alerts.length})
+          </button>
+        </div>
+
+        <div className="flex flex-col sm:flex-row gap-2">
+          <div className="relative">
+            <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Tìm máy hoặc nội dung..."
+              className="w-full sm:w-56 pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+            />
+          </div>
+          <select
+            value={severityFilter}
+            onChange={(e) => setSeverityFilter(e.target.value as 'ALL' | 'CRITICAL' | 'WARNING')}
+            aria-label="Lọc theo mức độ"
+            className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+          >
+            <option value="ALL">Mọi mức độ</option>
+            <option value="CRITICAL">CRITICAL</option>
+            <option value="WARNING">WARNING</option>
+          </select>
+        </div>
       </div>
 
       {/* Bảng danh sách cảnh báo */}
@@ -206,7 +244,16 @@ export const OperatorAlertsPage: React.FC = () => {
                           </button>
                         </div>
                       ) : (
-                        <span className="text-xs text-gray-400 italic">Đã giải quyết</span>
+                        <div className="text-xs text-gray-600 space-y-0.5 text-left inline-block">
+                          <div className="font-semibold text-emerald-700">
+                            Người xử lý: {a.resolvedBy || 'Operator'}
+                          </div>
+                          {a.resolvedAt && (
+                            <div className="font-mono text-[11px] text-gray-400">
+                              {new Date(a.resolvedAt).toLocaleString('vi-VN')}
+                            </div>
+                          )}
+                        </div>
                       )}
                     </td>
                   </tr>

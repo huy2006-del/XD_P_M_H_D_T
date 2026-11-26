@@ -1,7 +1,34 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import axios from 'axios';
 import axiosInstance from '../../../shared/api/axiosInstance';
 import type { AddItemRequest, MachineSlot, FruitBatch, RestockItem } from '../types';
+
+const DRAFT_KEY_PREFIX = 'fv_restock_draft_';
+
+function readDraft(machineId?: number): RestockItem[] {
+  if (!machineId) return [];
+  try {
+    const raw = sessionStorage.getItem(`${DRAFT_KEY_PREFIX}${machineId}`);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeDraft(machineId: number | undefined, items: RestockItem[]) {
+  if (!machineId) return;
+  try {
+    if (items.length === 0) {
+      sessionStorage.removeItem(`${DRAFT_KEY_PREFIX}${machineId}`);
+    } else {
+      sessionStorage.setItem(`${DRAFT_KEY_PREFIX}${machineId}`, JSON.stringify(items));
+    }
+  } catch {
+    // Bỏ qua lỗi quota sessionStorage
+  }
+}
 
 function getErrorMessage(error: unknown): string {
   if (axios.isAxiosError<{ message?: string }>(error)) {
@@ -10,15 +37,24 @@ function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Đã xảy ra lỗi không xác định khi nạp hàng.';
 }
 
-export function useRestockPlan() {
-  const [items, setItems] = useState<RestockItem[]>([]);
+export function useRestockPlan(machineId?: number) {
+  const [items, setItems] = useState<RestockItem[]>(() => readDraft(machineId));
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const submitLock = useRef(false);
 
+  useEffect(() => {
+    setItems(readDraft(machineId));
+  }, [machineId]);
+
+  useEffect(() => {
+    writeDraft(machineId, items);
+  }, [machineId, items]);
+
   function resetPlan() {
     setItems([]);
     setError(null);
+    writeDraft(machineId, []);
   }
 
   function addItem(data: AddItemRequest, slot: MachineSlot, batch: FruitBatch) {
