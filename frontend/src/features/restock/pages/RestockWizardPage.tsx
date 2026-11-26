@@ -24,10 +24,9 @@ export const RestockWizardPage: React.FC = () => {
   const [selectedMachine, setSelectedMachine] = useState<Machine | null>(null);
   const [selectedSlot, setSelectedSlot] = useState<MachineSlot | null>(null);
 
-  const { items, isSubmitting, error, addItem, removeItem, completePlan, resetPlan } = useRestockPlan();
+  const { items, isSubmitting, error, addItem, removeItem, completePlan } = useRestockPlan(selectedMachine?.id);
 
   const handleMachineSelect = (machine: Machine) => {
-    resetPlan();
     setSelectedMachine(machine);
     setSelectedSlot(null);
     setCurrentStep(1);
@@ -101,8 +100,8 @@ export const RestockWizardPage: React.FC = () => {
 
       {/* Thông tin ngữ cảnh máy & khay đang chọn */}
       {selectedMachine && currentStep > 0 && (
-        <div className="p-3.5 bg-blue-50/70 border border-blue-200/60 rounded-xl flex items-center justify-between text-xs text-blue-900">
-          <div className="flex items-center gap-2">
+        <div className="p-3.5 bg-blue-50/70 border border-blue-200/60 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-blue-900">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <span>Đang tiếp hàng cho: <strong>{selectedMachine.name}</strong> ({selectedMachine.serialNumber})</span>
             {selectedSlot && (
               <>
