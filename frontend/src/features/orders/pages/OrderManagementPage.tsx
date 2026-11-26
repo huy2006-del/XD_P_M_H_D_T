@@ -3,6 +3,7 @@ import { Filter, Calendar, Monitor, RefreshCw, Search } from 'lucide-react';
 import type { Order, OrderFilterParams, OrderMachineOption } from '../orderService';
 import { orderService } from '../orderService';
 import { TableSkeleton } from '../../../shared/components/ui/Skeleton';
+import { useSearchParams } from 'react-router-dom';
 
 const formatCurrency = (amount: number) =>
   new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount);
@@ -21,12 +22,13 @@ export const OrderManagementPage: React.FC = () => {
   const [machines, setMachines] = useState<OrderMachineOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [filters, setFilters] = useState<OrderFilterParams>({
-    date: '',
-    machineId: '',
-    status: '',
+  const [searchParams] = useSearchParams();
+  const [filters, setFilters] = useState<OrderFilterParams>(() => ({
+    date: searchParams.get('date') || '',
+    machineId: searchParams.get('machineId') || '',
+    status: searchParams.get('status') || '',
     keyword: '',
-  });
+  }));
 
   useEffect(() => {
     orderService

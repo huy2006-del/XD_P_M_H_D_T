@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   LayoutGrid,
   List,
@@ -13,6 +13,7 @@ import { toast } from 'sonner';
 
 import { axiosInstance } from '../../../shared/api/axiosInstance';
 import { useWebSocketSubscription } from '../../../shared/realtime/useWebSocketSubscription';
+import { CardSkeleton, TableSkeleton } from '../../../shared/components/ui/Skeleton';
 import { alertService } from '../../alerts/alertService';
 
 import QuickStats from '../components/QuickStats';
@@ -111,6 +112,7 @@ function mapMachineFromApi(
 
 export default function FleetDashboard() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [rawMachines, setRawMachines] = useState([]);
   const [telemetryByMachine, setTelemetryByMachine] = useState({});
@@ -121,7 +123,9 @@ export default function FleetDashboard() {
 
   const [viewMode, setViewMode] = useState('TABLE');
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('ALL');
+  const [statusFilter, setStatusFilter] = useState(
+    () => searchParams.get('status')?.toUpperCase() || 'ALL'
+  );
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingMachine, setEditingMachine] = useState(null);
@@ -142,6 +146,20 @@ export default function FleetDashboard() {
     tempMaxThreshold: '8',
     status: 'ONLINE',
   });
+
+  useEffect(() => {
+    const paramStatus = searchParams.get('status')?.toUpperCase() || 'ALL';
+    setStatusFilter(paramStatus);
+  }, [searchParams]);
+
+  const handleStatusFilterChange = (nextStatus) => {
+    setStatusFilter(nextStatus);
+    if (nextStatus === 'ALL') {
+      setSearchParams({});
+    } else {
+      setSearchParams({ status: nextStatus });
+    }
+  };
 
   const fetchLatestTelemetryForMachines = useCallback(async (machineList) => {
     if (!machineList.length) {
@@ -269,7 +287,11 @@ export default function FleetDashboard() {
   const filteredMachines = useMemo(() => {
     const q = searchTerm.trim().toLowerCase();
     return machines.filter((m) => {
-      if (statusFilter !== 'ALL' && m.status !== statusFilter) return false;
+      if (statusFilter === 'OUT_OF_ORDER') {
+        if (m.status !== 'OUT_OF_ORDER' && m.status !== 'ERROR') return false;
+      } else if (statusFilter !== 'ALL' && m.status !== statusFilter) {
+        return false;
+      }
       if (!q) return true;
       return (
         m.serial.toLowerCase().includes(q) ||
@@ -282,13 +304,11 @@ export default function FleetDashboard() {
   const stats = useMemo(
     () => ({
       total: machines.length,
-      active: machines.filter((m) => m.status === 'ONLINE').length,
-      error: machines.filter(
-        (m) =>
-          m.status === 'OFFLINE' ||
-          m.status === 'MAINTENANCE' ||
-          m.status === 'ERROR' ||
-          m.status === 'OUT_OF_ORDER'
+      online: machines.filter((m) => m.status === 'ONLINE').length,
+      offline: machines.filter((m) => m.status === 'OFFLINE').length,
+      maintenance: machines.filter((m) => m.status === 'MAINTENANCE').length,
+      outOfOrder: machines.filter(
+        (m) => m.status === 'OUT_OF_ORDER' || m.status === 'ERROR'
       ).length,
       unresolvedAlerts: alerts.filter((a) => a.status !== 'RESOLVED').length,
     }),
@@ -491,9 +511,24 @@ export default function FleetDashboard() {
           </div>
         </div>
 
+        {/* BƯỚC 5: Skeleton khi đang tải */}
         {loading && (
-          <div className="bg-white rounded-xl p-6 text-center mb-6 border border-gray-100 text-sm text-gray-500">
-            Đang tải danh sách máy và telemetry từ Backend...
+          <div className="space-y-6 mb-6">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+              <CardSkeleton />
+              <CardSkeleton />
+              <CardSkeleton />
+              <CardSkeleton />
+              <CardSkeleton />
+              <CardSkeleton />
+            </div>
+            <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+              <table className="w-full">
+                <tbody>
+                  <TableSkeleton rows={5} cols={6} />
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
 
@@ -511,7 +546,12 @@ export default function FleetDashboard() {
 
         {!loading && !error && (
           <>
-            <QuickStats stats={stats} />
+            {/* BƯỚC 6a: QuickStats có click lọc đồng bộ URL */}
+            <QuickStats
+              stats={stats}
+              activeFilter={statusFilter}
+              onSelectStatus={handleStatusFilterChange}
+            />
 
             <div className="flex flex-col sm:flex-row justify-between items-center bg-white p-4 rounded-xl shadow-sm border border-gray-100 mb-6 gap-4">
               <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
@@ -526,9 +566,10 @@ export default function FleetDashboard() {
                   <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
                 </div>
 
+                {/* BƯỚC 6b: Dropdown lọc trạng thái đồng bộ URL */}
                 <select
                   value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
+                  onChange={(e) => handleStatusFilterChange(e.target.value)}
                   className="w-full sm:w-auto px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white"
                 >
                   <option value="ALL">Tất cả trạng thái</option>
