@@ -9,8 +9,11 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.amqp.AmqpException;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
+
+import java.util.Optional;
 
 import com.example.app.exception.MotorJammedException;
 
@@ -51,7 +54,7 @@ class DispenseConsumerTest {
     @Test
     void retriesJamAndAcknowledgesOriginalAfterRetryIsPublished() throws Exception {
         DispenseRequestMessage request = new DispenseRequestMessage("ORD-1", "12", "A1", true);
-        when(dispenseWorkflowService.isCompleted("ORD-1")).thenReturn(false);
+        when(dispenseWorkflowService.completedNotification(request)).thenReturn(Optional.empty());
 
         assertDoesNotThrow(() -> dispenseConsumer.consume(request, channel, 71L));
 
@@ -66,7 +69,7 @@ class DispenseConsumerTest {
     @Test
     void deadLettersAfterThirdFailedAttempt() throws Exception {
         DispenseRequestMessage request = new DispenseRequestMessage("ORD-2", "12", "A1", true, 2);
-        when(dispenseWorkflowService.isCompleted("ORD-2")).thenReturn(false);
+        when(dispenseWorkflowService.completedNotification(request)).thenReturn(Optional.empty());
 
         assertDoesNotThrow(() -> dispenseConsumer.consume(request, channel, 72L));
 
@@ -79,7 +82,7 @@ class DispenseConsumerTest {
         DispenseRequestMessage request = new DispenseRequestMessage("ORD-3", "12", "A1", false);
         DispenseNotification notification = new DispenseNotification(
                 "ORD-3", 12L, 3L, "DISPENSED", "Nhả hàng thành công, mời nhận trái cây.", null, null);
-        when(dispenseWorkflowService.isCompleted("ORD-3")).thenReturn(false);
+        when(dispenseWorkflowService.completedNotification(request)).thenReturn(Optional.empty());
         when(dispenseWorkflowService.recordDispensed(request)).thenReturn(notification);
 
         assertDoesNotThrow(() -> dispenseConsumer.consume(request, channel, 73L));
@@ -92,7 +95,7 @@ class DispenseConsumerTest {
     @Test
     void faultyMachineOrSlotIsTreatedAsMotorJamAndRetried() throws Exception {
         DispenseRequestMessage request = new DispenseRequestMessage("ORD-5", "12", "A1", false);
-        when(dispenseWorkflowService.isCompleted("ORD-5")).thenReturn(false);
+        when(dispenseWorkflowService.completedNotification(request)).thenReturn(Optional.empty());
         doThrow(new MotorJammedException("Máy đang OUT_OF_ORDER"))
                 .when(dispenseWorkflowService).assertMotorOperational(request);
 
@@ -109,11 +112,30 @@ class DispenseConsumerTest {
     @Test
     void duplicateOrderIsAcknowledgedWithoutActuatingAgain() throws Exception {
         DispenseRequestMessage request = new DispenseRequestMessage("ORD-4", "12", "A1", false);
-        when(dispenseWorkflowService.isCompleted("ORD-4")).thenReturn(true);
+        DispenseNotification previous = new DispenseNotification(
+                "ORD-4", 12L, 3L, "DISPENSED", "Nhả hàng thành công, mời nhận trái cây.", null, null);
+        when(dispenseWorkflowService.completedNotification(request)).thenReturn(Optional.of(previous));
 
         assertDoesNotThrow(() -> dispenseConsumer.consume(request, channel, 74L));
 
+        verify(dispenseResultPublisher).publish(previous);
         verify(channel).basicAck(74L, false);
-        verifyNoInteractions(rabbitTemplate, messagingTemplate);
+        verifyNoInteractions(rabbitTemplate);
+    }
+
+    @Test
+    void resultPublishFailureRequeuesCommandForRecovery() throws Exception {
+        DispenseRequestMessage request = new DispenseRequestMessage("ORD-6", "12", "A1", false);
+        DispenseNotification notification = new DispenseNotification(
+                "ORD-6", 12L, 3L, "DISPENSED", "Nhả hàng thành công, mời nhận trái cây.", null, null);
+        when(dispenseWorkflowService.completedNotification(request)).thenReturn(Optional.empty());
+        when(dispenseWorkflowService.recordDispensed(request)).thenReturn(notification);
+        doThrow(new AmqpException("broker unavailable"))
+                .when(dispenseResultPublisher).publish(notification);
+
+        assertDoesNotThrow(() -> dispenseConsumer.consume(request, channel, 76L));
+
+        verify(dispenseResultPublisher).publish(notification);
+        verify(channel).basicNack(76L, false, true);
     }
 }

@@ -5,6 +5,8 @@ import com.example.app.dto.ProductResponse;
 import com.example.app.entity.Product;
 import com.example.app.exception.ResourceNotFoundException;
 import com.example.app.repository.ProductRepository;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -29,6 +31,7 @@ public class ProductService {
                 PageRequest.of(page, size, Sort.by(Sort.Direction.ASC, "id"))).map(ProductResponse::from);
     }
 
+    @Cacheable(value = "products", key = "#id", condition = "@productCacheConfig.canRead(#id)")
     @Transactional(readOnly = true)
     public ProductResponse get(Long id) { return ProductResponse.from(find(id)); }
 
@@ -40,6 +43,7 @@ public class ProductService {
         return ProductResponse.from(repository.save(p));
     }
 
+    @CacheEvict(value = "products", key = "#id")
     public ProductResponse update(Long id, ProductRequest r) {
         validate(r);
         Product p = find(id);
@@ -49,12 +53,14 @@ public class ProductService {
         return ProductResponse.from(repository.save(p));
     }
 
+    @CacheEvict(value = "products", key = "#id")
     public ProductResponse changeStatus(Long id, boolean active) {
         Product p = find(id);
         p.changeActive(active);
         return ProductResponse.from(repository.save(p));
     }
 
+    @CacheEvict(value = "products", key = "#id")
     public void delete(Long id) {
         Product p = find(id);
         repository.delete(p);

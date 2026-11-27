@@ -47,6 +47,9 @@ public class BatchService {
         if (Boolean.TRUE.equals(expired)) {
             spec = spec.and((root, cq, cb) -> cb.lessThan(root.<LocalDate>get("expiryDate"), today));
         }
+        if (Boolean.FALSE.equals(expired)) {
+            spec = spec.and((root, cq, cb) -> cb.greaterThanOrEqualTo(root.<LocalDate>get("expiryDate"), today));
+        }
         if (expiringWithinDays != null) {
             LocalDate limit = today.plusDays(expiringWithinDays);
             spec = spec.and((root, cq, cb) -> cb.and(

@@ -1,5 +1,6 @@
 package com.example.app.controller;
 
+import com.example.app.dto.SpoilageReportResponse;
 import com.example.app.service.ReportService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -18,16 +19,24 @@ public class ReportController {
 
     private final ReportService reportService;
 
+    @GetMapping("/spoilage")
+    public ResponseEntity<SpoilageReportResponse> getSpoilageReport(
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String supplier) {
+        return ResponseEntity.ok(reportService.getSpoilageReport(search, supplier));
+    }
+
     @GetMapping("/export-csv")
     public ResponseEntity<byte[]> exportCsv(
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(required = false) Long machineId) {
 
-        String csvContent = reportService.exportOrderCsv(from, to);
+        String csvContent = reportService.exportOrderCsv(from, to, machineId);
         byte[] csvBytes = csvContent.getBytes(StandardCharsets.UTF_8);
 
-        String filename = String.format("orders_report_%s_to_%s.csv", 
-                from != null ? from : "start", 
+        String filename = String.format("orders_report_%s_to_%s.csv",
+                from != null ? from : "start",
                 to != null ? to : LocalDate.now());
 
         return ResponseEntity.ok()

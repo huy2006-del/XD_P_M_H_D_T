@@ -6,9 +6,15 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.HashSet;
+import java.util.Set;
 
 @Entity
-@Table(name = "orders")
+@Table(name = "orders", indexes = {
+        @Index(name = "idx_orders_created_at", columnList = "created_at"),
+        @Index(name = "idx_orders_machine_created", columnList = "machine_id, created_at"),
+        @Index(name = "idx_orders_payment_status", columnList = "payment_status")
+})
 @Getter
 @Setter
 @NoArgsConstructor
@@ -50,6 +56,12 @@ public class Order {
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
     private List<OrderItem> items = new ArrayList<>();
+
+    @ElementCollection
+    @CollectionTable(name = "order_dispensed_slots", joinColumns = @JoinColumn(name = "order_id"))
+    @Column(name = "slot_id", nullable = false)
+    @Builder.Default
+    private Set<Long> dispensedSlots = new HashSet<>();
 
     @PrePersist
     protected void onCreate() {

@@ -24,10 +24,9 @@ export const RestockWizardPage: React.FC = () => {
   const [selectedMachine, setSelectedMachine] = useState<Machine | null>(null);
   const [selectedSlot, setSelectedSlot] = useState<MachineSlot | null>(null);
 
-  const { items, isSubmitting, error, addItem, removeItem, completePlan, resetPlan } = useRestockPlan();
+  const { items, isSubmitting, error, addItem, removeItem, completePlan, hasPendingSession } = useRestockPlan(selectedMachine?.id);
 
   const handleMachineSelect = (machine: Machine) => {
-    resetPlan();
     setSelectedMachine(machine);
     setSelectedSlot(null);
     setCurrentStep(1);
@@ -101,8 +100,8 @@ export const RestockWizardPage: React.FC = () => {
 
       {/* Thông tin ngữ cảnh máy & khay đang chọn */}
       {selectedMachine && currentStep > 0 && (
-        <div className="p-3.5 bg-blue-50/70 border border-blue-200/60 rounded-xl flex items-center justify-between text-xs text-blue-900">
-          <div className="flex items-center gap-2">
+        <div className="p-3.5 bg-blue-50/70 border border-blue-200/60 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-blue-900">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <span>Đang tiếp hàng cho: <strong>{selectedMachine.name}</strong> ({selectedMachine.serialNumber})</span>
             {selectedSlot && (
               <>
@@ -151,7 +150,7 @@ export const RestockWizardPage: React.FC = () => {
         )}
 
         {currentStep === 3 && (
-          <StepConfirmation items={items} isSubmitting={isSubmitting} onComplete={handleComplete} />
+          <StepConfirmation items={items} hasPendingSession={hasPendingSession} isSubmitting={isSubmitting} onComplete={handleComplete} />
         )}
       </div>
 
@@ -171,7 +170,7 @@ export const RestockWizardPage: React.FC = () => {
           <button
             type="button"
             onClick={() => setCurrentStep(3)}
-            disabled={items.length === 0}
+            disabled={items.length === 0 && !hasPendingSession}
             className="inline-flex items-center gap-2 px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-bold shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer transition-all"
           >
             <span>Xem lại kế hoạch & Xác nhận ({items.length} mục)</span>

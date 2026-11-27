@@ -28,6 +28,8 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 public class InventoryService {
@@ -55,6 +57,7 @@ public class InventoryService {
     @Transactional
     public DispenseResultDTO dispenseFIFO(Long slotId, int quantityToDispense) {
         if (quantityToDispense < 1) throw new IllegalArgumentException("quantityToDispense must be >= 1");
+        slotInventory.lockSlot(slotId);
         MachineSlotInventoryResponse machineSlot = machineSlots.getSlot(slotId);
         if ("JAMMED".equals(machineSlot.status())) {
             throw new BusinessRuleException("Không thể xuất hàng vì khay đang bị kẹt.");
@@ -98,6 +101,7 @@ public class InventoryService {
     @Transactional
     public SlotInventoryItem loadToSlot(Long slotId, Long batchId, int quantity) {
         if (quantity < 1) throw new IllegalArgumentException("quantity must be >= 1");
+        slotInventory.lockSlot(slotId);
         FruitBatch batch = batches.findByIdForUpdate(batchId)
                 .orElseThrow(() -> new ResourceNotFoundException("Batch", batchId));
         if (batch.isExpired(LocalDate.now())) {
@@ -112,6 +116,9 @@ public class InventoryService {
                 .orElseGet(() -> new SlotBatchInventory(slotId, batch, 0));
         MachineSlotInventoryResponse machineSlot = machineSlots.getSlot(slotId);
         long stockAfterLoad = slotInventory.sumQuantityBySlotId(slotId) + quantity;
+        if ("JAMMED".equals(machineSlot.status())) {
+            throw new BusinessRuleException("Không thể nạp hàng vào khay đang bị kẹt.");
+        }
         if (stockAfterLoad > machineSlot.capacity()) {
             throw new BusinessRuleException("Số lượng nạp vượt quá sức chứa của khay.");
         }
@@ -133,6 +140,43 @@ public class InventoryService {
     public List<SlotInventoryItem> getSlotInventory(Long slotId) {
         return slotInventory.findBySlotIdAndQuantityGreaterThanOrderByBatchExpiryDateAsc(slotId, 0)
                 .stream().map(SlotInventoryItem::from).toList();
+    }
+
+    public record SlotSummary(Long slotId, Long productId, int capacity, String status,
+                              long quantity, long sellableQuantity, long expiredQuantity,
+                              List<SlotInventoryItem> batches) {}
+
+    @Transactional(readOnly = true)
+    public SlotSummary getSlotSummary(Long slotId) {
+        return summarize(machineSlots.getSlot(slotId), getSlotInventory(slotId), LocalDate.now());
+    }
+
+    @Transactional(readOnly = true)
+    public List<SlotSummary> getMachineInventory(Long machineId, Integer maxSellableQuantity) {
+        if (maxSellableQuantity != null && maxSellableQuantity < 0) {
+            throw new IllegalArgumentException("maxSellableQuantity must be >= 0");
+        }
+        List<MachineSlotInventoryResponse> slots = machineSlots.getMachineSlots(machineId);
+        if (slots.isEmpty()) return List.of();
+        List<Long> ids = slots.stream().map(MachineSlotInventoryResponse::slotId).toList();
+        Map<Long, List<SlotInventoryItem>> bySlot = slotInventory
+                .findBySlotIdInAndQuantityGreaterThanOrderByBatchExpiryDateAscIdAsc(ids, 0)
+                .stream()
+                .collect(Collectors.groupingBy(SlotBatchInventory::getSlotId,
+                        Collectors.mapping(SlotInventoryItem::from, Collectors.toList())));
+        LocalDate today = LocalDate.now();
+        return slots.stream()
+                .map(slot -> summarize(slot, bySlot.getOrDefault(slot.slotId(), List.of()), today))
+                .filter(slot -> maxSellableQuantity == null || slot.sellableQuantity() <= maxSellableQuantity)
+                .toList();
+    }
+
+    private SlotSummary summarize(MachineSlotInventoryResponse slot, List<SlotInventoryItem> batches, LocalDate today) {
+        long quantity = batches.stream().mapToLong(SlotInventoryItem::quantity).sum();
+        long expired = batches.stream().filter(batch -> batch.expiryDate().isBefore(today))
+                .mapToLong(SlotInventoryItem::quantity).sum();
+        return new SlotSummary(slot.slotId(), slot.productId(), slot.capacity(), slot.status(),
+                quantity, quantity - expired, expired, batches);
     }
 
     private void recordRestockAudit(Long slotId, FruitBatch batch, int quantity) {

@@ -1,3 +1,4 @@
+
 package com.example.app.entity;
 
 import jakarta.persistence.Column;
@@ -45,6 +46,14 @@ public class FruitBatch {
     @Column(name = "quantity_remaining", nullable = false)
     private int quantityRemaining;
 
+    // Số lượng đã báo cáo hư hỏng
+    @Column(name = "quantity_reported_spoilage", nullable = false)
+    private int quantityReportedSpoilage = 0;
+
+    // Ngày sản xuất, cho phép null
+    @Column(name = "production_date")
+    private LocalDate productionDate;
+
     @Column(name = "unit_cost", nullable = false, precision = 12, scale = 2)
     private BigDecimal unitCost;
 
@@ -89,4 +98,12 @@ public class FruitBatch {
     public int getQuantityRemaining() { return quantityRemaining; }
     public BigDecimal getUnitCost() { return unitCost; }
     public Instant getCreatedAt() { return createdAt; }
+
+    public int getQuantityReportedSpoilage() {
+        return quantityReportedSpoilage;
+    }
+
+    public LocalDate getProductionDate() {
+        return productionDate;
+    }
 }

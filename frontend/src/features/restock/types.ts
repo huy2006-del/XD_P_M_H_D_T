@@ -31,6 +31,7 @@ export interface FruitBatch {
 
 export interface RestockItem {
   id?: number;
+  requestId?: string;
   sessionId?: number;
   slotId: number;
   batchId: number;
@@ -44,12 +45,19 @@ export interface RestockSession {
   id: number;
   sessionCode: string;
   machineId: number;
-  operatorId: number;
+  operatorId: string;
   status: "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
   startedAt: string;
   completedAt?: string;
   notes?: string;
-  items: RestockItem[];
+  items: Array<
+    Pick<RestockItem, 'slotId' | 'batchId' | 'quantityAdded'> & {
+      id: number;
+      slotCode?: string;
+      batchCode?: string;
+      productName?: string;
+    }
+  >;
 }
 
 export interface AddItemRequest {

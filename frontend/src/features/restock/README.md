@@ -1,16 +1,12 @@
 # Restock feature
 
-The wizard uses the existing machine, slot, batch, and slot-inventory APIs.
-Its pending plan is local to the page and inventory is updated only when the
-operator confirms.
+The wizard keeps a browser draft for the signed-in operator and selected machine.
+On confirmation it creates a restock session, submits each item, and completes
+the session. The draft keeps the session ID and request IDs for retries.
 
-`useRestockHistory` and `RestockSession` are retained as a starting point for a
-future history screen. The current backend does not implement
-`GET /api/v1/restock-sessions/machine/{machineId}`. Do not wire the history hook
-into a page until that endpoint and its response contract are implemented.
+Each accepted item updates inventory immediately. If an item fails, the wizard
+keeps the remaining items and the session so the operator can resume. Reusing
+the same request ID with the same payload returns the existing result.
 
-The backend currently exposes `POST /api/v1/slots/{slotId}/batches` with
-`{ "batchId": number, "quantity": number }` for each confirmed load. These
-requests are not one atomic multi-item transaction; if a later request fails,
-earlier successful loads remain applied and the UI retains only unprocessed
-plan items for a retry.
+History uses the Restock Session API and displays completed sessions.
+Operators see their own sessions. Admins can view sessions across operators.

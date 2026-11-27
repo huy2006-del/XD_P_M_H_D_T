@@ -43,5 +43,18 @@ public class DataSeeder implements CommandLineRunner {
             userRepository.save(operator);
             log.info("Initialized default OPERATOR user: operator / operator123");
         }
+
+        if (!userRepository.existsByUsername("operator1")) {
+            User operator1 = User.builder()
+                    .username("operator1")
+                    .password(passwordEncoder.encode("Operator@123"))
+                    .firstName("Nguyễn Văn")
+                    .lastName("Vận Hành")
+                    .email("operator1@freshvend.com")
+                    .role("OPERATOR")
+                    .build();
+            userRepository.save(operator1);
+            log.info("Initialized default OPERATOR user: operator1 / Operator@123");
+        }
     }
 }

@@ -5,10 +5,11 @@ import type { RestockItem } from '../types';
 interface Props {
   items: RestockItem[];
   isSubmitting: boolean;
+  hasPendingSession: boolean;
   onComplete: () => Promise<void>;
 }
 
-export const StepConfirmation: React.FC<Props> = ({ items, isSubmitting, onComplete }) => {
+export const StepConfirmation: React.FC<Props> = ({ items, isSubmitting, hasPendingSession, onComplete }) => {
 
   const totalQuantity = items.reduce((sum, item) => sum + item.quantityAdded, 0);
 
@@ -74,8 +75,8 @@ export const StepConfirmation: React.FC<Props> = ({ items, isSubmitting, onCompl
         <button
           type="button"
           onClick={handleConfirm}
-          disabled={isSubmitting || items.length === 0}
-          className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-8 py-3.5 rounded-xl font-bold text-base shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all cursor-pointer"
+          disabled={isSubmitting || (items.length === 0 && !hasPendingSession)}
+          className="w-full sm:w-auto justify-center inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-8 py-3.5 rounded-xl font-bold text-base shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all cursor-pointer"
         >
           {isSubmitting ? (
             <>

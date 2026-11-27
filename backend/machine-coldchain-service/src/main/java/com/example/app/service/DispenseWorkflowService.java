@@ -23,6 +23,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -34,8 +35,52 @@ public class DispenseWorkflowService {
     private final AlertRepository alertRepository;
 
     @Transactional(readOnly = true)
-    public boolean isCompleted(String orderId) {
-        return dispenseOperationRepository.existsById(orderId);
+    public Optional<DispenseNotification> completedNotification(DispenseRequestMessage request) {
+        if (request == null || request.orderId() == null) {
+            return Optional.empty();
+        }
+        String compositeId = buildOperationId(request);
+        long machineId;
+        MachineSlot slot;
+        try {
+            machineId = parseMachineId(request.machineId());
+            slot = findSlot(machineId, request.slotId());
+        } catch (RuntimeException ex) {
+            // An invalid or unknown slot is not evidence that this order/slot was
+            // already dispensed. Let normal validation report the underlying error.
+            return Optional.empty();
+        }
+
+        Optional<DispenseOperation> existing = dispenseOperationRepository.findById(compositeId)
+                .filter(operation -> matchesRequestSlot(operation, machineId, slot.getId()));
+        if (existing.isEmpty()) {
+            existing = dispenseOperationRepository.findById(request.orderId())
+                    .filter(operation -> matchesRequestSlot(operation, machineId, slot.getId()));
+        }
+        return existing.map(operation -> new DispenseNotification(
+                request.orderId(), operation.getMachineId(), operation.getSlotId(),
+                operation.getStatus().name(),
+                operation.getStatus() == DispenseStatus.JAMMED
+                        ? "Motor bị kẹt sau 3 lần thử; khay cần bảo trì."
+                        : "Nhả hàng thành công, mời nhận trái cây.",
+                operation.getRefundVoucherCode(), operation.getRefundPercent()));
+    }
+
+    private boolean matchesRequestSlot(DispenseOperation operation, long machineId, Long slotId) {
+        return operation.getMachineId() != null
+                && operation.getMachineId() == machineId
+                && operation.getSlotId() != null
+                && operation.getSlotId().equals(slotId);
+    }
+
+    private String buildOperationId(DispenseRequestMessage request) {
+        try {
+            long machineId = parseMachineId(request.machineId());
+            MachineSlot slot = findSlot(machineId, request.slotId());
+            return request.orderId() + ":" + slot.getId();
+        } catch (RuntimeException ex) {
+            return request.orderId() + ":" + request.slotId();
+        }
     }
 
     /**
@@ -64,8 +109,9 @@ public class DispenseWorkflowService {
     public DispenseNotification recordDispensed(DispenseRequestMessage request) {
         long machineId = parseMachineId(request.machineId());
         MachineSlot slot = findSlot(machineId, request.slotId());
+        String operationId = request.orderId() + ":" + slot.getId();
         DispenseOperation operation = new DispenseOperation(
-                request.orderId(), machineId, slot.getId(), request.retryCount());
+                operationId, machineId, slot.getId(), request.retryCount());
         dispenseOperationRepository.save(operation);
         return new DispenseNotification(
                 request.orderId(), machineId, slot.getId(), DispenseStatus.DISPENSED.name(),
@@ -76,10 +122,12 @@ public class DispenseWorkflowService {
     public DispenseFailureResult recordTerminalJam(DispenseRequestMessage request) {
         long machineId = parseMachineId(request.machineId());
         MachineSlot slot = findSlot(machineId, request.slotId());
+        String operationId = request.orderId() + ":" + slot.getId();
 
-        DispenseOperation operation = dispenseOperationRepository.findById(request.orderId())
+        DispenseOperation operation = dispenseOperationRepository.findById(operationId)
+                .or(() -> dispenseOperationRepository.findById(request.orderId()))
                 .orElseGet(() -> new DispenseOperation(
-                        request.orderId(), machineId, slot.getId(), request.retryCount()));
+                        operationId, machineId, slot.getId(), request.retryCount()));
         if (operation.getStatus() != DispenseStatus.JAMMED) {
             slot.markForMaintenance();
             machineSlotRepository.save(slot);
@@ -97,18 +145,18 @@ public class DispenseWorkflowService {
             operation.markJammed(request.retryCount() + 1, voucherCode, alert.getId());
             dispenseOperationRepository.save(operation);
             return new DispenseFailureResult(
-                    jamNotification(operation, slot), AlertResponse.from(alert));
+                    jamNotification(request.orderId(), operation), AlertResponse.from(alert));
         }
 
         Alert alert = alertRepository.findById(operation.getAlertId())
                 .orElseThrow(() -> new IllegalStateException(
                         "Dispense operation is JAMMED but its motor-jam alert is missing"));
-        return new DispenseFailureResult(jamNotification(operation, slot), AlertResponse.from(alert));
+        return new DispenseFailureResult(jamNotification(request.orderId(), operation), AlertResponse.from(alert));
     }
 
-    private DispenseNotification jamNotification(DispenseOperation operation, MachineSlot slot) {
+    private DispenseNotification jamNotification(String canonicalOrderId, DispenseOperation operation) {
         return new DispenseNotification(
-                operation.getOrderId(), operation.getMachineId(), operation.getSlotId(),
+                canonicalOrderId, operation.getMachineId(), operation.getSlotId(),
                 DispenseStatus.JAMMED.name(),
                 "Motor bị kẹt sau 3 lần thử; khay cần bảo trì.",
                 operation.getRefundVoucherCode(), operation.getRefundPercent());

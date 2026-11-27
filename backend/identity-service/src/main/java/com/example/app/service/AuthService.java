@@ -39,4 +39,17 @@ public class AuthService {
                         .build())
                 .build();
     }
+
+    public LoginResponse.UserProfileDto getCurrentUser(String username) {
+        if (username == null || username.isBlank()) {
+            throw new RuntimeException("Người dùng chưa đăng nhập");
+        }
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy người dùng: " + username));
+        return LoginResponse.UserProfileDto.builder()
+                .id(user.getId())
+                .username(user.getUsername())
+                .role(user.getRole() != null ? user.getRole() : "OPERATOR")
+                .build();
+    }
 }

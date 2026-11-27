@@ -43,28 +43,25 @@ public class DispenseConsumer {
             @Header(AmqpHeaders.DELIVERY_TAG) long deliveryTag
     ) throws IOException {
 
-        // 1. Kiểm tra đơn hàng đã xử lý trước đó
-        if (dispenseWorkflowService.isCompleted(request.orderId())) {
-
-            log.info(
-                    "[DUPLICATE DISPENSE IGNORED] orderId={} đã được xử lý trước đó.",
-                    request.orderId()
-            );
-
-            channel.basicAck(deliveryTag, false);
-
-            log.info(
-                    "[ACK SENT] Duplicate ignored | orderId={}, deliveryTag={}",
-                    request.orderId(),
-                    deliveryTag
-            );
-
-            return;
-        }
-
         int attempt = request.retryCount() + 1;
 
         try {
+
+            // Idempotency is per order and slot. A repeated command republishes
+            // its persisted result so a previous broker outage cannot strand the order.
+            var completedResult = dispenseWorkflowService.completedNotification(request);
+            if (completedResult.isPresent()) {
+                DispenseNotification notification = completedResult.get();
+                dispenseResultPublisher.publish(notification);
+                messagingTemplate.convertAndSend(
+                        "/topic/dispense/" + notification.machineId(), notification);
+                log.info("[DUPLICATE DISPENSE RESULT REPUBLISHED] orderId={}, slotId={}",
+                        request.orderId(), notification.slotId());
+                channel.basicAck(deliveryTag, false);
+                log.info("[ACK SENT] Duplicate result republished | orderId={}, deliveryTag={}",
+                        request.orderId(), deliveryTag);
+                return;
+            }
 
             // 2. Giả lập động cơ nhả hàng
             log.info(
@@ -158,6 +155,10 @@ public class DispenseConsumer {
                     request.orderId(),
                     deliveryTag
             );
+        } catch (AmqpException exception) {
+            log.error("[RESULT PUBLISH FAILED] orderId={} chưa gửi được kết quả; requeue lệnh.",
+                    request.orderId(), exception);
+            channel.basicNack(deliveryTag, false, true);
         }
     }
 

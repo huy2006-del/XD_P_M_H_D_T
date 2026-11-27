@@ -2,6 +2,7 @@ package com.example.app.service;
 
 import com.example.app.dto.request.DispenseRequestMessage;
 import com.example.app.dto.response.DispenseFailureResult;
+import com.example.app.dto.response.DispenseNotification;
 import com.example.app.entity.Alert;
 import com.example.app.entity.DispenseOperation;
 import com.example.app.entity.DispenseStatus;
@@ -52,6 +53,7 @@ class DispenseWorkflowServiceTest {
         when(slot.getSlotCode()).thenReturn("A1");
         when(machineSlotRepository.findByMachineIdAndSlotCodeIgnoreCase(12L, "A1"))
                 .thenReturn(Optional.of(slot));
+        when(dispenseOperationRepository.findById("ORD-55:33")).thenReturn(Optional.empty());
         when(dispenseOperationRepository.findById("ORD-55")).thenReturn(Optional.empty());
         when(alertRepository.save(any(Alert.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(dispenseOperationRepository.save(any(DispenseOperation.class)))
@@ -71,6 +73,35 @@ class DispenseWorkflowServiceTest {
         assertTrue(operation.getRefundVoucherCode().startsWith("REFUND_VOUCHER_ORD-"));
         assertEquals("JAMMED", result.notification().status());
         assertEquals("MOTOR_JAM", result.alert().alertType());
+    }
+
+    @Test
+    void completedNotificationOnlyMatchesTheExactMachineAndSlot() {
+        DispenseRequestMessage request = new DispenseRequestMessage("ORD-MULTI", "4", "10", false);
+        MachineSlot requestedSlot = org.mockito.Mockito.mock(MachineSlot.class);
+        when(requestedSlot.getId()).thenReturn(10L);
+        when(machineSlotRepository.findByIdAndMachineId(10L, 4L)).thenReturn(Optional.of(requestedSlot));
+        when(dispenseOperationRepository.findById("ORD-MULTI:10"))
+                .thenReturn(Optional.of(new DispenseOperation("ORD-MULTI:10", 4L, 12L, 0)));
+        when(dispenseOperationRepository.findById("ORD-MULTI")).thenReturn(Optional.empty());
+
+        assertTrue(dispenseWorkflowService.completedNotification(request).isEmpty());
+    }
+
+    @Test
+    void completedNotificationCanBeReplayedForTheSameSlot() {
+        DispenseRequestMessage request = new DispenseRequestMessage("ORD-MULTI", "4", "10", false);
+        MachineSlot requestedSlot = org.mockito.Mockito.mock(MachineSlot.class);
+        when(requestedSlot.getId()).thenReturn(10L);
+        when(machineSlotRepository.findByIdAndMachineId(10L, 4L)).thenReturn(Optional.of(requestedSlot));
+        when(dispenseOperationRepository.findById("ORD-MULTI:10"))
+                .thenReturn(Optional.of(new DispenseOperation("ORD-MULTI:10", 4L, 10L, 0)));
+
+        DispenseNotification notification = dispenseWorkflowService.completedNotification(request).orElseThrow();
+
+        assertEquals("ORD-MULTI", notification.orderId());
+        assertEquals(10L, notification.slotId());
+        assertEquals("DISPENSED", notification.status());
     }
 
     @Test

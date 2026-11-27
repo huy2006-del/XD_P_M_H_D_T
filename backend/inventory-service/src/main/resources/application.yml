@@ -4,15 +4,25 @@ server:
 spring:
   application:
     name: inventory-service
+
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 5MB
+      max-request-size: 6MB
+
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5433/freshvend_inventory}
     username: ${DB_USERNAME:freshvend_user}
     password: ${DB_PASSWORD:freshvend_secret_password}
+
   jpa:
     hibernate:
       ddl-auto: update
     open-in-view: false
+
   rabbitmq:
+    publisher-confirm-type: correlated
     host: ${RABBITMQ_HOST:localhost}
     port: ${RABBITMQ_PORT:5672}
     username: ${RABBITMQ_USERNAME:guest}
@@ -20,6 +30,28 @@ spring:
     listener:
       simple:
         prefetch: 1
+        default-requeue-rejected: false
+        retry:
+          enabled: true
+          max-attempts: 3
+          initial-interval: 500ms
+          multiplier: 2
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      database: ${REDIS_DATABASE:0}
+      connect-timeout: 500ms
+      timeout: 500ms
+
+  cloud:
+    openfeign:
+      httpclient:
+        hc5:
+          enabled: true
+      okhttp:
+        enabled: false
 
 eureka:
   client:
@@ -37,3 +69,6 @@ vietqr:
   bank-id: MB
   account-no: "0000000000"
   account-name: FRESHVEND
+
+jwt:
+  secret: ${JWT_SECRET:freshvend-super-secret-key-must-be-at-least-256-bits-long-for-hmac-sha256}

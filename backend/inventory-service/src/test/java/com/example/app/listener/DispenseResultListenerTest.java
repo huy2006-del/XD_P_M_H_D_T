@@ -9,7 +9,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -29,12 +29,13 @@ class DispenseResultListenerTest {
             new DispenseResultEvent("ORD-1", 1L, 3L, "DISPENSED", null, null);
 
     @Test
-    void completedOrderDeductsOneItemFromSlot() {
+    void completedOrderDeductsResolvedQuantityFromSlot() {
         when(orderService.applyDispenseResult(event)).thenReturn(true);
+        when(orderService.resolveDispenseQuantity("ORD-1", 3L)).thenReturn(3);
 
         listener.onDispenseResult(event);
 
-        verify(inventoryService).dispenseFIFO(3L, 1);
+        verify(inventoryService).dispenseFIFO(3L, 3);
     }
 
     @Test
@@ -47,10 +48,11 @@ class DispenseResultListenerTest {
     }
 
     @Test
-    void stockFailureDoesNotPropagateSoMessageIsNotRequeued() {
+    void stockFailurePropagatesForTransactionRollbackAndBrokerRetry() {
         when(orderService.applyDispenseResult(event)).thenReturn(true);
+        when(orderService.resolveDispenseQuantity("ORD-1", 3L)).thenReturn(1);
         doThrow(new IllegalStateException("không đủ hàng")).when(inventoryService).dispenseFIFO(3L, 1);
 
-        assertDoesNotThrow(() -> listener.onDispenseResult(event));
+        assertThrows(IllegalStateException.class, () -> listener.onDispenseResult(event));
     }
 }

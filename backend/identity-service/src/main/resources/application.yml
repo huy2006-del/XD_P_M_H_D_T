@@ -17,3 +17,6 @@ eureka:
   client:
     service-url:
       defaultZone: ${EUREKA_SERVER_URL:http://localhost:8761/eureka/}
+
+jwt:
+  secret: ${JWT_SECRET:freshvend-super-secret-key-must-be-at-least-256-bits-long-for-hmac-sha256}

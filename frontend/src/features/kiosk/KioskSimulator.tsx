@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { ShoppingCart, X, CheckCircle, RefreshCw, Search, Plus, Minus, Trash2, Tag, CreditCard, PackageOpen } from 'lucide-react';
-import { kioskService } from './services/kioskService';
+import { kioskService, type MachineSummaryDTO } from './services/kioskService';
 import type { MachineSlotDTO, OrderResponse, MachineStatusDTO, CreateOrderRequest } from './types/kiosk';
+import { useWebSocketSubscription } from '../../shared/realtime/useWebSocketSubscription';
+import { FoodSafetyOverlay } from './components/FoodSafetyOverlay';
 
 interface Props {
   machineId?: number;
@@ -9,8 +11,10 @@ interface Props {
 
 const POS_CATEGORIES = ['Trái cây'];
 
-export default function KioskSimulator({ machineId = 1 }: Props) {
+export default function KioskSimulator({ machineId: initialMachineId = 1 }: Props) {
   // --- STATE DỮ LIỆU ---
+  const [selectedMachineId, setSelectedMachineId] = useState<number>(initialMachineId);
+  const [machines, setMachines] = useState<MachineSummaryDTO[]>([]);
   const [machineStatus, setMachineStatus] = useState<MachineStatusDTO | null>(null);
   const [slots, setSlots] = useState<MachineSlotDTO[]>([]);
   const [loading, setLoading] = useState(true);
@@ -18,10 +22,12 @@ export default function KioskSimulator({ machineId = 1 }: Props) {
   // --- STATE UI & TÌM KIẾM ---
   const [activeCategory, setActiveCategory] = useState('Trái cây');
   const [searchQuery, setSearchQuery] = useState('');
+  const [simulateJam, setSimulateJam] = useState(false);
+  const [simulatingPayment, setSimulatingPayment] = useState(false);
   
   // --- STATE GIỎ HÀNG ---
   // [FIX] Khai báo rõ generic Map<number, number> để đảm bảo an toàn kiểu TypeScript
-  const [cart, setCart] = useState(new Map());
+  const [cart, setCart] = useState<Map<number, number>>(() => new Map());
   const [isProcessing, setIsProcessing] = useState(false);
   
   // --- STATE THANH TOÁN & HOÀN TẤT ---
@@ -37,10 +43,12 @@ export default function KioskSimulator({ machineId = 1 }: Props) {
   const fetchMachineData = useCallback(async () => {
     setLoading(true);
     try {
-      const [statusData, slotsData] = await Promise.all([
-        kioskService.getMachineStatus(machineId),
-        kioskService.getMachineSlots(machineId)
+      const [machineList, statusData, slotsData] = await Promise.all([
+        kioskService.getMachines().catch(() => []),
+        kioskService.getMachineStatus(selectedMachineId),
+        kioskService.getMachineSlots(selectedMachineId)
       ]);
+      setMachines(machineList);
       setMachineStatus(statusData);
       setSlots(slotsData);
     } catch (error: unknown) {
@@ -50,9 +58,38 @@ export default function KioskSimulator({ machineId = 1 }: Props) {
     } finally {
       setLoading(false);
     }
-  }, [machineId]);
+  }, [selectedMachineId]);
 
   useEffect(() => { fetchMachineData(); }, [fetchMachineData]);
+
+  // Lắng nghe WebSocket Telemetry & Cảnh báo để cập nhật nhiệt độ và khóa an toàn thực phẩm tức thì
+  useWebSocketSubscription<{ temperature?: number }>(`/topic/telemetry/${selectedMachineId}`, (telemetry) => {
+    if (typeof telemetry?.temperature === 'number') {
+      setMachineStatus((prev) => prev ? { ...prev, temperature: telemetry.temperature! } : prev);
+    }
+  });
+
+  useWebSocketSubscription<{ machineId?: number; severity?: string; status?: string }>('/topic/alerts', (alert) => {
+    if (alert?.machineId === selectedMachineId) {
+      void kioskService.getMachineStatus(selectedMachineId).then(setMachineStatus).catch(() => {});
+    }
+  });
+
+  useWebSocketSubscription<{ orderId?: string; status?: string; refundVoucherCode?: string | null }>(
+    `/topic/dispense/${selectedMachineId}`,
+    (notification) => {
+      if (!currentOrder || !notification) return;
+      if (notification.orderId === currentOrder.orderCode || notification.orderId === currentOrder.orderId) {
+        if (notification.status === 'JAMMED') {
+          setCurrentOrder((prev) => prev ? { ...prev, dispenseStatus: 'JAMMED', refundVoucherCode: notification.refundVoucherCode ?? prev.refundVoucherCode } : prev);
+          setPaymentStatus('JAMMED');
+        } else if (notification.status === 'DISPENSED' || notification.status === 'COMPLETED') {
+          setResetTimer(5);
+          setPaymentStatus('DISPENSING');
+        }
+      }
+    }
+  );
 
   // 2. NGHIỆP VỤ GIỎ HÀNG
   const handleAddToCart = (slot: MachineSlotDTO) => {
@@ -95,7 +132,7 @@ export default function KioskSimulator({ machineId = 1 }: Props) {
     setIsProcessing(true);
     try {
       const payload: CreateOrderRequest = {
-        machineId,
+        machineId: selectedMachineId,
         items: [...cart.entries()].flatMap(([slotId, quantity]) => {
           const slot = slots.find((item) => item.slotId === slotId);
           if (!slot?.productId) return [];
@@ -211,17 +248,27 @@ export default function KioskSimulator({ machineId = 1 }: Props) {
     }
   }, [paymentStatus, resetTimer, handleResetKiosk]);
 
+  const handleSimulatePayment = async () => {
+    if (!currentOrder || simulatingPayment) return;
+    setSimulatingPayment(true);
+    try {
+      await kioskService.simulatePaymentWebhook(
+        currentOrder.orderCode,
+        currentOrder.totalAmount,
+        simulateJam
+      );
+    } catch (error) {
+      console.error('Lỗi giả lập webhook thanh toán:', error);
+      alert('Không thể gửi tín hiệu thanh toán tới Backend.');
+    } finally {
+      setSimulatingPayment(false);
+    }
+  };
+
   // --- RENDER GIAO DIỆN ---
   if (loading) return <div className="h-screen w-full bg-white flex items-center justify-center"><RefreshCw className="animate-spin text-emerald-600 w-16 h-16"/></div>;
-  
-  if (machineStatus?.status !== 'ONLINE') return (
-    <div className="h-screen w-full bg-gray-50 flex flex-col items-center justify-center p-6 text-center">
-      <div className="mb-6 text-6xl" role="img" aria-label="Cảnh báo">⚠️</div>
-      <h2 className="text-3xl md:text-5xl font-black text-gray-800 mb-4">TẠM NGƯNG PHỤC VỤ VÌ AN TOÀN THỰC PHẨM</h2>
-      <p className="text-gray-500 text-xl mb-8">Máy đang {machineStatus?.status ?? 'không kết nối'}. Hệ thống tạm khóa để bảo vệ sản phẩm. Vui lòng quay lại sau.</p>
-      <button onClick={fetchMachineData} className="px-10 py-4 bg-emerald-600 text-white text-xl font-bold rounded-2xl shadow-lg">Khởi động lại</button>
-    </div>
-  );
+
+  const isFoodSafetyLocked = machineStatus?.status !== 'ONLINE';
 
   // [FIX] Phòng vệ giá trị rỗng và khoảng trắng thừa khi tìm kiếm
   const normalizedQuery = searchQuery.trim().toLowerCase();
@@ -249,16 +296,47 @@ export default function KioskSimulator({ machineId = 1 }: Props) {
       </aside>
 
       {/* MAIN LƯỚI SẢN PHẨM */}
-      <main className="flex-1 flex flex-col bg-gray-50 min-w-0">
-        <header className="h-24 bg-white border-b border-gray-200 flex justify-between items-center px-8 shrink-0 shadow-sm z-10">
-          <div className="relative w-full max-w-xl">
+      <main className="flex-1 flex flex-col bg-gray-50 min-w-0 relative">
+        <FoodSafetyOverlay isLocked={isFoodSafetyLocked} />
+        <header className="h-24 bg-white border-b border-gray-200 flex justify-between items-center px-8 gap-4 shrink-0 shadow-sm z-10">
+          <div className="relative w-full max-w-md">
             <Search className="absolute left-5 top-1/2 -translate-y-1/2 w-6 h-6 text-gray-400" />
             <input type="text" placeholder="Tìm kiếm đồ uống, trái cây..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-14 pr-6 py-4 bg-gray-100 border-none rounded-2xl focus:ring-2 focus:ring-emerald-500 focus:bg-white outline-none font-medium text-lg" />
           </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 bg-emerald-500 rounded-full animate-pulse"></div>
-            <span className="font-bold text-gray-600 text-lg">{machineStatus?.temperature?.toFixed(1) || '0.0'}°C</span>
+          <div className="flex items-center gap-4">
+            <select
+              aria-label="Chọn máy bán hàng"
+              value={selectedMachineId}
+              onChange={(e) => {
+                setSelectedMachineId(Number(e.target.value));
+                setCart(new Map());
+              }}
+              className="px-3 py-2.5 bg-gray-100 border border-gray-200 rounded-xl text-sm font-bold text-gray-700"
+            >
+              {machines.length === 0 ? (
+                <option value={selectedMachineId}>Máy #{selectedMachineId}</option>
+              ) : (
+                machines.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name} ({m.serialNumber})
+                  </option>
+                ))
+              )}
+            </select>
+            <label className="flex items-center gap-2 text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 px-3 py-2 rounded-xl cursor-pointer">
+              <input
+                type="checkbox"
+                checked={simulateJam}
+                onChange={(e) => setSimulateJam(e.target.checked)}
+                className="rounded border-amber-300 text-amber-600"
+              />
+              <span>Bật giả lập kẹt động cơ</span>
+            </label>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 bg-emerald-500 rounded-full animate-pulse"></div>
+              <span className="font-bold text-gray-600 text-lg">{machineStatus?.temperature?.toFixed(1) || '4.5'}°C</span>
+            </div>
           </div>
         </header>
         
@@ -362,14 +440,28 @@ export default function KioskSimulator({ machineId = 1 }: Props) {
                 </div>
                 
                 <p className="text-5xl font-black text-emerald-600 mb-6">{currentOrder.totalAmount.toLocaleString('vi-VN')} đ</p>
-                <div className="flex items-center justify-center gap-3 text-orange-500 font-bold mb-8 bg-orange-50 py-3 rounded-xl text-lg">
+                <div className="flex items-center justify-center gap-3 text-orange-500 font-bold mb-6 bg-orange-50 py-3 rounded-xl text-lg">
                   <RefreshCw className="w-6 h-6 animate-spin" />
                   Chờ thanh toán ({Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')})
                 </div>
-                
-                <button onClick={handleResetKiosk} className="w-full py-4 bg-gray-100 text-gray-600 font-bold text-xl rounded-2xl hover:bg-gray-200 transition-colors">
-                  Hủy giao dịch
-                </button>
+
+                <div className="space-y-3">
+                  <button
+                    type="button"
+                    onClick={() => void handleSimulatePayment()}
+                    disabled={simulatingPayment}
+                    className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-black text-lg rounded-2xl shadow-md transition-colors"
+                  >
+                    {simulatingPayment
+                      ? 'Đang xác nhận thanh toán...'
+                      : simulateJam
+                        ? '⚡ Xác nhận Đã Chuyển Khoản (Test Kẹt Motor → DLQ)'
+                        : '⚡ Xác nhận Đã Chuyển Khoản (Demo Webhook)'}
+                  </button>
+                  <button onClick={handleResetKiosk} className="w-full py-3.5 bg-gray-100 text-gray-600 font-bold text-lg rounded-2xl hover:bg-gray-200 transition-colors">
+                    Hủy giao dịch
+                  </button>
+                </div>
               </>
             )}
 

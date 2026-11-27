@@ -1,3 +1,4 @@
+
 package com.example.app.controller;
 
 import com.example.app.dto.MachineSlotInventoryRequest;
@@ -5,7 +6,9 @@ import com.example.app.dto.MachineSlotInventoryResponse;
 import com.example.app.entity.MachineSlot;
 import com.example.app.exception.ResourceNotFoundException;
 import com.example.app.repository.MachineSlotRepository;
+
 import lombok.RequiredArgsConstructor;
+
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -23,8 +26,12 @@ public class InternalMachineSlotController {
 
     @GetMapping("/{slotId}")
     @Transactional(readOnly = true)
-    public MachineSlotInventoryResponse getSlot(@PathVariable Long slotId) {
+    public MachineSlotInventoryResponse getSlot(
+            @PathVariable Long slotId
+    ) {
+
         MachineSlot slot = findSlot(slotId);
+
         return new MachineSlotInventoryResponse(
                 slot.getId(),
                 slot.getProductId(),
@@ -40,13 +47,24 @@ public class InternalMachineSlotController {
             @PathVariable Long slotId,
             @RequestBody MachineSlotInventoryRequest request
     ) {
+
         MachineSlot slot = findSlot(slotId);
+
         slot.updateStock(request.currentStock());
+
         machineSlotRepository.save(slot);
+
+
     }
 
     private MachineSlot findSlot(Long slotId) {
+
         return machineSlotRepository.findById(slotId)
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy khay hàng có id: " + slotId));
+                .orElseThrow(() ->
+                        new ResourceNotFoundException(
+                                "Không tìm thấy khay hàng có id: "
+                                        + slotId
+                        )
+                );
     }
 }

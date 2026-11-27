@@ -11,6 +11,10 @@ import org.springframework.amqp.core.TopicExchange;
 import org.springframework.amqp.rabbit.annotation.EnableRabbit;
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.amqp.rabbit.core.RabbitAdmin;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.amqp.rabbit.retry.RepublishMessageRecovererWithConfirms;
+import org.springframework.amqp.rabbit.retry.MessageRecoverer;
+import org.springframework.amqp.rabbit.connection.CachingConnectionFactory;
 import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
 import org.springframework.amqp.support.converter.MessageConverter;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -29,6 +33,7 @@ public class RabbitConfig {
     // Kết quả nhả hàng do machine-coldchain-service báo về (DISPENSED / JAMMED + voucher hoàn tiền)
     public static final String DISPENSE_RESULT_QUEUE = "order.dispense.result.queue";
     public static final String DISPENSE_RESULT_ROUTING_KEY = "order.dispense.result";
+    public static final String DISPENSE_RESULT_DLQ = "order.dispense.result.dlq";
 
     public static final String DIRECT_EXCHANGE_NAME = "freshvend.direct.exchange";
     public static final String DISPENSE_COMMAND_QUEUE = "dispense.command.queue";
@@ -93,6 +98,17 @@ public class RabbitConfig {
     @Bean
     public Queue dispenseResultQueue() {
         return new Queue(DISPENSE_RESULT_QUEUE, true);
+    }
+
+    @Bean
+    public Queue dispenseResultDlq() {
+        return new Queue(DISPENSE_RESULT_DLQ, true);
+    }
+
+    @Bean
+    public MessageRecoverer dispenseResultRecoverer(RabbitTemplate rabbitTemplate) {
+        return new RepublishMessageRecovererWithConfirms(rabbitTemplate, "", DISPENSE_RESULT_DLQ,
+                CachingConnectionFactory.ConfirmType.CORRELATED);
     }
 
     @Bean

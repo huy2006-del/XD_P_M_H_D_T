@@ -29,7 +29,7 @@ spring:
             - id: inventory-slot-stock
               uri: lb://inventory-service
               predicates:
-                - Path=/api/v1/slots/*/inventory,/api/v1/slots/*/batches,/api/v1/slots/*/dispense
+                - Path=/api/v1/slots/by-machine/inventory,/api/v1/slots/*/inventory,/api/v1/slots/*/batches,/api/v1/slots/*/dispense
 
             - id: identity-service
               uri: lb://identity-service

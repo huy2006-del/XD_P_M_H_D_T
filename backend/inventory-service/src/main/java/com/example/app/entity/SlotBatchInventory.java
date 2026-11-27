@@ -6,6 +6,7 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
@@ -14,6 +15,7 @@ import jakarta.persistence.UniqueConstraint;
 /** Số quả của một lô đang thực tế nằm trong một khay. */
 @Entity
 @Table(name = "slot_batch_inventory",
+        indexes = @Index(name = "idx_slot_batch_slot_id", columnList = "slot_id"),
         uniqueConstraints = @UniqueConstraint(name = "uk_slot_batch", columnNames = {"slot_id", "batch_id"}))
 public class SlotBatchInventory {
     @Id

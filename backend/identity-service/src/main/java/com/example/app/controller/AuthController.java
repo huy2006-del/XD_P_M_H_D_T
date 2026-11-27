@@ -8,6 +8,8 @@ import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -21,5 +23,19 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseEntity<LoginResponse> login(@RequestBody @Valid LoginRequest request) {
         return ResponseEntity.ok(authService.login(request));
+    }
+
+    @GetMapping("/me")
+    public ResponseEntity<LoginResponse.UserProfileDto> me(Authentication authentication) {
+        if (authentication instanceof JwtAuthenticationToken jwt) {
+            String userId = jwt.getToken().getClaimAsString("userId");
+            String role = jwt.getToken().getClaimAsString("role");
+            return ResponseEntity.ok(LoginResponse.UserProfileDto.builder()
+                    .id(userId != null ? userId : authentication.getName())
+                    .username(authentication.getName())
+                    .role(role != null ? role : "OPERATOR")
+                    .build());
+        }
+        return ResponseEntity.ok(authService.getCurrentUser(authentication != null ? authentication.getName() : null));
     }
 }

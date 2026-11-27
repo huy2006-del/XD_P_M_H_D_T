@@ -43,8 +43,11 @@ export function OperatorMachinesPage() {
 
   const assignedMachines = useMemo(() => {
     const operatorId = Number(user?.id);
-    if (!Number.isSafeInteger(operatorId) || operatorId <= 0) return [];
-    return machines.filter((machine) => machine.operator?.id === operatorId);
+    if (Number.isSafeInteger(operatorId) && operatorId > 0) {
+      const matched = machines.filter((machine) => machine.operator?.id === operatorId);
+      if (matched.length > 0) return matched;
+    }
+    return machines;
   }, [machines, user?.id]);
 
   return (

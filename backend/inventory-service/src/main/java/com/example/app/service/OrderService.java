@@ -92,7 +92,7 @@ public class OrderService {
      */
     @Transactional
     public boolean applyDispenseResult(DispenseResultEvent event) {
-        Optional<Order> found = findOrderByReference(event.orderId());
+        Optional<Order> found = findOrderByReferenceForUpdate(event.orderId());
         if (found.isEmpty()) {
             log.warn("[DISPENSE RESULT] Không tìm thấy đơn '{}', bỏ qua kết quả {}.",
                     event.orderId(), event.status());
@@ -110,20 +110,70 @@ public class OrderService {
         }
 
         Order order = found.get();
+        if (!order.getMachineId().equals(event.machineId())) {
+            throw new IllegalArgumentException("Dispense result machine does not match the order.");
+        }
         if (order.getDispenseStatus() != DispenseStatus.PENDING) {
             log.info("[DISPENSE RESULT] Đơn {} đang {}, bỏ qua kết quả {} (đã xử lý hoặc trùng lặp).",
                     order.getOrderCode(), order.getDispenseStatus(), target);
             return false;
         }
 
-        order.setDispenseStatus(target);
-        if (target == DispenseStatus.JAMMED && event.refundVoucherCode() != null) {
-            order.setRefundVoucherCode(event.refundVoucherCode());
+        var expectedSlots = order.getItems().stream().map(item -> item.getSlotNumber().longValue())
+                .collect(Collectors.toSet());
+        if (!expectedSlots.isEmpty() && !expectedSlots.contains(event.slotId())) {
+            throw new IllegalArgumentException("Dispense result slot does not match any order item.");
+        }
+        if (order.getDispensedSlots().contains(event.slotId())) {
+            return false;
+        }
+        if (target == DispenseStatus.JAMMED) {
+            order.setDispenseStatus(target);
+            if (event.refundVoucherCode() != null) {
+                order.setRefundVoucherCode(event.refundVoucherCode());
+            }
+        } else {
+            order.getDispensedSlots().add(event.slotId());
+            if (order.getDispensedSlots().containsAll(expectedSlots)) {
+                order.setDispenseStatus(target);
+            }
         }
         orderRepository.save(order);
-        log.info("[DISPENSE RESULT] Đơn {} → {}{}", order.getOrderCode(), target,
+        log.info("[DISPENSE RESULT] Đơn {} → {}{}", order.getOrderCode(), order.getDispenseStatus(),
                 order.getRefundVoucherCode() != null ? ", voucher=" + order.getRefundVoucherCode() : "");
         return target == DispenseStatus.COMPLETED;
+    }
+
+    /**
+     * Lấy tổng số lượng cần trừ kho cho đơn hàng (mặc định 1 nếu đơn không có chi tiết items).
+     */
+    @Transactional(readOnly = true)
+    public int resolveDispenseQuantity(String orderReference, Long slotId) {
+        Optional<Order> found = findOrderByReference(orderReference);
+        if (found.isEmpty() || found.get().getItems() == null || found.get().getItems().isEmpty()) {
+            return 1;
+        }
+        int totalQty = found.get().getItems().stream()
+                .filter(item -> slotId.equals(item.getSlotNumber().longValue()))
+                .mapToInt(item -> item.getQuantity() != null && item.getQuantity() > 0 ? item.getQuantity() : 0)
+                .sum();
+        return totalQty > 0 ? totalQty : 1;
+    }
+
+    private Optional<Order> findOrderByReferenceForUpdate(String reference) {
+        if (reference == null || reference.isBlank()) {
+            return Optional.empty();
+        }
+        Optional<Order> byCode = orderRepository.findByOrderCodeForUpdate(reference);
+        if (byCode.isPresent() || !reference.chars().allMatch(Character::isDigit)) {
+            return byCode;
+        }
+        try {
+            long id = Long.parseLong(reference);
+            return orderRepository.findByIdForUpdate(id);
+        } catch (NumberFormatException exception) {
+            return Optional.empty();
+        }
     }
 
     private Optional<Order> findOrderByReference(String reference) {

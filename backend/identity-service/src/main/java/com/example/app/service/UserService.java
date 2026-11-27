@@ -33,27 +33,31 @@ public class UserService {
         user.setFirstName(request.getFirstName());
         user.setLastName(request.getLastName());
         user.setEmail(request.getEmail());
+        user.setRole(request.getRole() != null && !request.getRole().isBlank()
+                ? request.getRole().trim().toUpperCase()
+                : "OPERATOR");
 
         User savedUser = userRepository.save(user);
 
-        return UserResponse.builder()
-                .id(savedUser.getId())
-                .username(savedUser.getUsername())
-                .firstName(savedUser.getFirstName())
-                .lastName(savedUser.getLastName())
-                .email(savedUser.getEmail())
-                .build();
+        return toUserResponse(savedUser);
     }
 
     public List<UserResponse> getUsers() {
         return userRepository.findAll().stream()
-                .map(user -> UserResponse.builder()
-                        .id(user.getId())
-                        .username(user.getUsername())
-                        .firstName(user.getFirstName())
-                        .lastName(user.getLastName())
-                        .email(user.getEmail())
-                        .build())
+                .map(this::toUserResponse)
                 .toList();
+    }
+
+    private UserResponse toUserResponse(User user) {
+        String role = user.getRole() != null && !user.getRole().isBlank() ? user.getRole() : "OPERATOR";
+        return UserResponse.builder()
+                .id(user.getId())
+                .username(user.getUsername())
+                .firstName(user.getFirstName())
+                .lastName(user.getLastName())
+                .fullName(UserResponse.buildFullName(user.getFirstName(), user.getLastName(), user.getUsername()))
+                .email(user.getEmail())
+                .role(role)
+                .build();
     }
 }

@@ -15,4 +15,5 @@ public class PaymentWebhookRequest {
 
     private String transactionNo;
     private String responseCode; // 00 = SUCCESS
+    private boolean simulateJam;
 }

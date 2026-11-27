@@ -22,11 +22,18 @@ public class UserCreationRequest {
     @Email(message = "Email invalid")
     String email;
 
+    String role;
+
     public UserCreationRequest(String username, String password, String firstName, String lastName, String email) {
+        this(username, password, firstName, lastName, email, "OPERATOR");
+    }
+
+    public UserCreationRequest(String username, String password, String firstName, String lastName, String email, String role) {
         this.username = username;
         this.password = password;
         this.firstName = firstName;
         this.lastName = lastName;
         this.email = email;
+        this.role = role;
     }
 }

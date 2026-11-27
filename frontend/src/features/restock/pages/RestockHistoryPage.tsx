@@ -35,7 +35,7 @@ export function RestockHistoryPage() {
       <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Lịch sử tiếp hàng</h1>
-          <p className="mt-1 text-sm text-gray-500">Các lần nạp hàng được ghi nhận trong nhật ký hệ thống.</p>
+          <p className="mt-1 text-sm text-gray-500">Các phiên tiếp hàng đã hoàn tất.</p>
         </div>
         <button
           type="button"
@@ -64,7 +64,7 @@ export function RestockHistoryPage() {
             type="search"
             value={operatorFilter}
             onChange={(event) => setOperatorFilter(event.target.value)}
-            placeholder="Lọc theo người thực hiện"
+            placeholder="Lọc theo mã người thực hiện"
             className="w-full rounded-lg border border-gray-200 py-2 pl-9 pr-3 text-sm"
           />
         </label>

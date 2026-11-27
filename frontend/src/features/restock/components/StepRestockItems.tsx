@@ -226,8 +226,8 @@ export const StepRestockItems: React.FC<Props> = ({
                     key={amount}
                     type="button"
                     disabled={isAdding || maxAllowed <= 0}
-                    onClick={() => setQuantity((current) => Math.min(maxAllowed, current + amount))}
-                    className="rounded-md border border-gray-200 bg-white px-2.5 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+                    onClick={() => setQuantity((current) => Math.min(maxAllowed, Math.max(1, current) + amount))}
+                    className="min-h-[38px] rounded-md border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-100 disabled:opacity-50"
                   >
                     +{amount}
                   </button>
@@ -236,7 +236,7 @@ export const StepRestockItems: React.FC<Props> = ({
                   type="button"
                   disabled={isAdding || maxAllowed <= 0}
                   onClick={() => setQuantity(maxAllowed)}
-                  className="rounded-md border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-100 disabled:opacity-50"
+                  className="min-h-[38px] rounded-md border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100 disabled:opacity-50"
                 >
                   Đầy khay ({maxAllowed})
                 </button>

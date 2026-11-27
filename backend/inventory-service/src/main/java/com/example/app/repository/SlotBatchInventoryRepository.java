@@ -3,6 +3,7 @@ package com.example.app.repository;
 import com.example.app.entity.SlotBatchInventory;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -11,9 +12,17 @@ import java.util.List;
 import java.util.Optional;
 
 public interface SlotBatchInventoryRepository extends JpaRepository<SlotBatchInventory, Long> {
+    // Locks an empty slot as well as one with inventory rows.
+    @Query(value = "select 1 from pg_advisory_xact_lock(:slotId)", nativeQuery = true)
+    int lockSlot(@Param("slotId") Long slotId);
+
 
     /** Task 2.1: các lô trong khay, hạn dùng gần nhất lên đầu. */
     List<SlotBatchInventory> findBySlotIdAndQuantityGreaterThanOrderByBatchExpiryDateAsc(Long slotId, int minQty);
+
+    @EntityGraph(attributePaths = "batch")
+    List<SlotBatchInventory> findBySlotIdInAndQuantityGreaterThanOrderByBatchExpiryDateAscIdAsc(
+            List<Long> slotIds, int minQty);
 
     /**
      * Hàng đợi FIFO dùng khi trừ kho: khóa dòng (chống 2 giao dịch trừ trùng), chỉ lấy lô còn hạn và còn hàng.
@@ -33,4 +42,7 @@ public interface SlotBatchInventoryRepository extends JpaRepository<SlotBatchInv
 
     @Query("select coalesce(sum(s.quantity), 0) from SlotBatchInventory s where s.batch.id = :batchId")
     long sumQuantityByBatchId(@Param("batchId") Long batchId);
+
+    @Query("select count(distinct s.slotId) from SlotBatchInventory s where s.slotId in :slotIds and s.quantity > 0")
+    long countFilledSlots(@Param("slotIds") List<Long> slotIds);
 }

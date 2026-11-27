@@ -70,7 +70,20 @@ const mapOrder = (order: BackendOrder): OrderResponse => {
   };
 };
 
+export interface MachineSummaryDTO {
+  id: number;
+  name: string;
+  serialNumber: string;
+  status: string;
+  locationName?: string;
+}
+
 export const kioskService = {
+  async getMachines(): Promise<MachineSummaryDTO[]> {
+    const { data } = await publicAxios.get<MachineSummaryDTO[]>('/api/v1/machines');
+    return Array.isArray(data) ? data : [];
+  },
+
   async getMachineStatus(machineId: number): Promise<MachineStatusDTO> {
     const { data } = await publicAxios.get<MachineResponse>(`/api/v1/machines/${machineId}`);
     return {
@@ -125,6 +138,17 @@ export const kioskService = {
   async getOrderStatus(orderId: string): Promise<OrderResponse> {
     // [FIX] Mã hóa path param orderId để tránh lỗi URL khi orderId chứa ký tự đặc biệt
     const { data } = await publicAxios.get<BackendOrder>(`/api/v1/orders/${encodeURIComponent(orderId)}`);
+    return mapOrder(data);
+  },
+
+  async simulatePaymentWebhook(orderCode: string, amount: number, simulateJam = false): Promise<OrderResponse> {
+    const { data } = await publicAxios.post<BackendOrder>('/api/v1/payments/webhook', {
+      orderCode,
+      amount,
+      transactionNo: `SIM-${Date.now()}`,
+      responseCode: '00',
+      simulateJam,
+    });
     return mapOrder(data);
   },
 };

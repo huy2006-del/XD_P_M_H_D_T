@@ -8,6 +8,7 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
@@ -16,7 +17,7 @@ import java.time.Instant;
 
 /** Lịch sử xuất/nhập kho. Một lần nhả hàng lấy từ 2 lô sẽ ghi 2 dòng. */
 @Entity
-@Table(name = "stock_movements")
+@Table(name = "stock_movements", indexes = @Index(name = "idx_stock_movements_slot_created", columnList = "slot_id, created_at"))
 public class StockMovement {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
