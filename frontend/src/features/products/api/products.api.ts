@@ -1,4 +1,4 @@
-import { axiosInstance } from '@/shared/api/axiosInstance';
+import { API_BASE_URL, axiosInstance } from '@/shared/api/axiosInstance';
 import type { PaginatedResponse } from '@/shared/types/common.types';
 import type {
   Product,
@@ -7,11 +7,17 @@ import type {
 } from '../types/product.types';
 
 const BASE = '/api/v1/products';
-const API_ORIGIN = (
-  import.meta.env.VITE_API_URL ||
-  import.meta.env.VITE_API_BASE_URL ||
-  'http://localhost:8080'
-).replace(/\/$/, '');
+
+const resolveProductImageUrl = (url?: string | null): string => {
+  if (!url) return '';
+  if (/^(https?:|data:|blob:)/i.test(url)) return url;
+  return new URL(url, API_BASE_URL).toString();
+};
+
+const normalizeProduct = (product: Product): Product => ({
+  ...product,
+  imageUrl: resolveProductImageUrl(product.imageUrl),
+});
 
 export const productsApi = {
   list: async (query: ProductListQuery): Promise<PaginatedResponse<Product>> => {
@@ -23,27 +29,30 @@ export const productsApi = {
         isActive: query.isActive,
       },
     });
-    return data;
+    return {
+      ...data,
+      content: (data.content ?? []).map(normalizeProduct),
+    };
   },
 
   getById: async (id: string): Promise<Product> => {
     const { data } = await axiosInstance.get<Product>(`${BASE}/${id}`);
-    return data;
+    return normalizeProduct(data);
   },
 
   create: async (payload: ProductUpsertPayload): Promise<Product> => {
     const { data } = await axiosInstance.post<Product>(BASE, payload);
-    return data;
+    return normalizeProduct(data);
   },
 
   update: async (id: string, payload: ProductUpsertPayload): Promise<Product> => {
     const { data } = await axiosInstance.put<Product>(`${BASE}/${id}`, payload);
-    return data;
+    return normalizeProduct(data);
   },
 
   toggleStatus: async (id: string, isActive: boolean): Promise<Product> => {
     const { data } = await axiosInstance.patch<Product>(`${BASE}/${id}/status`, { isActive });
-    return data;
+    return normalizeProduct(data);
   },
 
   remove: async (id: string): Promise<void> => {
@@ -58,8 +67,6 @@ export const productsApi = {
       formData,
       { headers: { 'Content-Type': 'multipart/form-data' } },
     );
-    return /^https?:\/\//i.test(data.imageUrl)
-      ? data.imageUrl
-      : new URL(data.imageUrl, API_ORIGIN).toString();
+    return resolveProductImageUrl(data.imageUrl);
   },
 };
