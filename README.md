@@ -132,11 +132,11 @@ Directly access the Kiosk routing: http://localhost:5173/kiosk-simulator
 Stop each running server with `Ctrl+C`. Stop PostgreSQL and RabbitMQ from the repository root:
 
 ```powershell
-docker compose down
+docker compose stop
 
 ```
 
-`docker compose down -v` also deletes the database data volume.
+`docker compose stop ` also stop the database data volume.
 
 If your terminal is currently inside `frontend`, run `Set-Location ..` (or
 `cd ..`) to return to the repository root. To switch straight to the backend,
