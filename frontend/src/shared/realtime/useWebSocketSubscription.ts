@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Client } from '@stomp/stompjs';
 import type { IMessage } from '@stomp/stompjs';
 import SockJS from 'sockjs-client';
+import { API_BASE_URL } from '../api/axiosInstance';
 
 export type WebSocketConnectionStatus =
   | 'IDLE'
@@ -20,13 +21,8 @@ export interface WebSocketSubscriptionState {
   reconnect: () => void;
 }
 
-const API_BASE_URL =
-  import.meta.env.VITE_API_URL ||
-  import.meta.env.VITE_API_BASE_URL ||
-  'http://localhost:8080';
-
 const WS_URL =
-  import.meta.env.VITE_WS_URL || `${API_BASE_URL.replace(/\/$/, '')}/ws-freshvend`;
+  import.meta.env.VITE_WS_URL || `${API_BASE_URL}/ws-freshvend`;
 
 export function useWebSocketSubscription<T = unknown>(
   topic: string,

@@ -7,10 +7,13 @@ interface ErrorResponseData {
 }
 
 // Ưu tiên cấu hình API của FE2, hỗ trợ cả biến môi trường FE1
-const BASE_URL =
+export const API_BASE_URL = (
   import.meta.env.VITE_API_URL ||
   import.meta.env.VITE_API_BASE_URL ||
-  "http://localhost:8080";
+  "http://localhost:8080"
+).replace(/\/$/, "");
+
+const BASE_URL = API_BASE_URL;
 
 // Axios dùng cho các API cần đăng nhập
 export const axiosInstance = axios.create({

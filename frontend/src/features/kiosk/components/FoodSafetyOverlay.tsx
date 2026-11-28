@@ -2,10 +2,40 @@ import React from 'react';
 
 interface Props {
   isLocked: boolean;
+  status?: string;
+  machineName?: string;
 }
 
-export const FoodSafetyOverlay: React.FC<Props> = ({ isLocked }) => {
+const getLockContent = (status?: string) => {
+  switch (status?.toUpperCase()) {
+    case 'MAINTENANCE':
+      return {
+        title: 'Máy đang bảo trì',
+        subtitle: 'Tạm ngưng giao dịch',
+        description:
+          'Thiết bị đang trong quá trình kiểm tra kỹ thuật hoặc nạp hàng. Hệ thống tạm khóa giao dịch mới để đảm bảo chất lượng phục vụ.',
+      };
+    case 'OFFLINE':
+      return {
+        title: 'Máy tạm mất kết nối',
+        subtitle: 'Không thể nhận giao dịch',
+        description:
+          'Thiết bị hiện đang ngoại tuyến và chưa thể đồng bộ dữ liệu với máy chủ. Hệ thống tạm ngưng phục vụ cho đến khi kết nối ổn định trở lại.',
+      };
+    default:
+      return {
+        title: 'Tạm ngưng phục vụ',
+        subtitle: 'vì an toàn thực phẩm',
+        description:
+          'Nhiệt độ bảo quản lạnh hoặc cảm biến hiện không đạt chuẩn. Hệ thống tạm thời khóa để bảo vệ sức khỏe của quý khách.',
+      };
+  }
+};
+
+export const FoodSafetyOverlay: React.FC<Props> = ({ isLocked, status, machineName }) => {
   if (!isLocked) return null;
+
+  const content = getLockContent(status);
 
   return (
     <div className="absolute inset-0 z-[9999] flex flex-col items-center justify-center bg-slate-900/95 text-white p-8 text-center transition-opacity duration-300">
@@ -17,15 +47,23 @@ export const FoodSafetyOverlay: React.FC<Props> = ({ isLocked }) => {
           </svg>
         </div>
       </div>
-      
+
+      {machineName && (
+        <span className="mb-4 px-4 py-1.5 rounded-full bg-white/10 border border-white/20 text-sm font-bold tracking-wide text-slate-200">
+          {machineName} {status ? `• ${status}` : ''}
+        </span>
+      )}
+
       <h1 className="text-4xl md:text-5xl font-black mb-6 uppercase tracking-widest text-red-500 drop-shadow-lg">
-        Tạm ngưng phục vụ
-        <br/>vì an toàn thực phẩm
+        {content.title}
+        <br />
+        {content.subtitle}
       </h1>
-      
+
       <p className="text-xl md:text-2xl text-slate-300 max-w-4xl leading-relaxed font-medium">
-        Nhiệt độ bảo quản lạnh hiện tại không đạt chuẩn. Hệ thống tạm thời khóa để bảo vệ sức khỏe của quý khách.
-        <br/><span className="text-white font-bold mt-4 inline-block">Xin vui lòng quay lại sau!</span>
+        {content.description}
+        <br />
+        <span className="text-white font-bold mt-4 inline-block">Xin vui lòng quay lại sau!</span>
       </p>
     </div>
   );
