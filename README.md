@@ -51,7 +51,7 @@ docker compose stop
 
 ```
 
-`docker compose stop -v` also stop the database data volume.
+`docker compose stop ` also stop the database data volume.
 
 ## Run the whole project (Windows PowerShell — Local Dev)
 
