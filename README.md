@@ -47,11 +47,11 @@ copy `token`, and paste it into **Authorize**.
 Stop all containers from the repository root:
 
 ```powershell
-docker compose down
+docker compose stop
 
 ```
 
-`docker compose down -v` also deletes the database data volume.
+`docker compose stop -v` also stop the database data volume.
 
 ## Run the whole project (Windows PowerShell — Local Dev)
 
