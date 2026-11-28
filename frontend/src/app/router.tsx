@@ -125,11 +125,11 @@ export const router = createBrowserRouter([
             children: [
               {
                 index: true,
-                element: <Navigate to="batches" replace />,
+                element: <Navigate to="/operator/batches" replace />,
               },
               {
                 path: "dashboard",
-                element: <Navigate to="batches" replace />,
+                element: <Navigate to="/operator/batches" replace />,
               },
               {
                 path: "batches",
